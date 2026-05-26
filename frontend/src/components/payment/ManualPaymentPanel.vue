@@ -83,13 +83,14 @@
           </div>
         </div>
 
-        <div class="w-full shrink-0 lg:w-[280px]">
+        <div class="w-full shrink-0 lg:w-[380px] xl:w-[440px]">
           <div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-900">
             <img
               v-if="order.manual_payment?.qr_code_image_url"
               :src="order.manual_payment.qr_code_image_url"
               :alt="paymentMethodLabel"
-              class="mx-auto aspect-square w-full rounded-xl object-contain"
+              class="mx-auto aspect-square w-full cursor-zoom-in rounded-xl object-contain"
+              @click="previewImage = order.manual_payment?.qr_code_image_url || ''"
             />
             <div v-else class="flex aspect-square items-center justify-center rounded-xl bg-gray-100 text-sm text-gray-400 dark:bg-dark-800">
               {{ localText('未配置收款码', 'QR code not configured') }}
@@ -155,6 +156,28 @@
         </p>
       </div>
     </div>
+
+    <div class="flex justify-end">
+      <button type="button" class="btn btn-secondary" @click="emit('back')">
+        {{ localText('返回继续浏览充值/订阅', 'Back to recharge and plans') }}
+      </button>
+    </div>
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="previewImage"
+          class="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4"
+          @click="previewImage = ''"
+        >
+          <img
+            :src="previewImage"
+            :alt="paymentMethodLabel"
+            class="max-h-[92vh] max-w-[92vw] rounded-2xl bg-white object-contain shadow-2xl"
+          />
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -185,6 +208,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'updated', order: PaymentOrder): void
+  (e: 'back'): void
 }>()
 
 const { t, locale } = useI18n()
@@ -194,6 +218,7 @@ const proofImage = ref('')
 const proofNote = ref('')
 const submitting = ref(false)
 const switching = ref(false)
+const previewImage = ref('')
 
 watch(
   () => props.order.manual_payment?.proof_note,

@@ -23,6 +23,7 @@
               wechat: checkout.manual_payment.wechat_enabled,
             }"
             @updated="handleManualPaymentUpdated"
+            @back="returnToSelectionWithPendingOrder"
           />
           <PaymentStatusPanel
             v-else
@@ -40,6 +41,25 @@
         </template>
         <!-- Tab content (select phase) -->
         <template v-else>
+          <div
+            v-if="manualPaymentOrder && manualPaymentOrder.status === 'PENDING'"
+            class="card border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-900/20"
+          >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm font-semibold text-amber-700 dark:text-amber-300">
+                  {{ localText('你有一笔未完成的人工付款订单', 'You have an unfinished manual payment order') }}
+                </p>
+                <p class="mt-1 text-xs text-amber-700/80 dark:text-amber-300/80">
+                  {{ localText('可以继续浏览充值或套餐，也可以随时回到当前订单继续上传凭证。', 'You can continue browsing recharge and plans, or return to the current order anytime.') }}
+                </p>
+              </div>
+              <button class="btn btn-secondary" @click="resumePendingManualPayment">
+                {{ localText('返回当前订单', 'Resume current order') }}
+              </button>
+            </div>
+          </div>
+
           <!-- Top-up Tab -->
           <template v-if="activeTab === 'recharge'">
             <!-- Recharge Account Card -->
@@ -497,6 +517,19 @@ function onPaymentSettled() {
 
 function handleManualPaymentUpdated(order: PaymentOrder) {
   manualPaymentOrder.value = order
+}
+
+function returnToSelectionWithPendingOrder() {
+  paymentPhase.value = 'select'
+}
+
+function resumePendingManualPayment() {
+  if (!manualPaymentOrder.value) return
+  paymentPhase.value = 'paying'
+}
+
+function localText(zh: string, en: string): string {
+  return String(i18n.locale.value || '').startsWith('zh') ? zh : en
 }
 
 function startManualPaymentPolling() {
