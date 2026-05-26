@@ -67,6 +67,11 @@ export const paymentAPI = {
     return apiClient.post<PaymentOrder>(`/payment/orders/${id}/manual-proof`, data)
   },
 
+  /** Switch manual payment source between Alipay and WeChat */
+  updateManualPaymentSource(id: number, data: { payment_source: 'manual_alipay' | 'manual_wxpay' }) {
+    return apiClient.post<PaymentOrder>(`/payment/orders/${id}/manual-source`, data)
+  },
+
   /** Verify order payment status with upstream provider */
   verifyOrder(outTradeNo: string) {
     return apiClient.post<PaymentOrder>('/payment/orders/verify', { out_trade_no: outTradeNo })

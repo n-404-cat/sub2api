@@ -79,6 +79,10 @@ type SubmitManualProofRequest struct {
 	ProofNote     string
 }
 
+type UpdateManualPaymentSourceRequest struct {
+	PaymentSource string
+}
+
 type ReviewManualPaymentRequest struct {
 	Approved bool
 	Note     string
@@ -412,6 +416,62 @@ func (s *PaymentService) SubmitManualPaymentProof(ctx context.Context, orderID, 
 	s.writeAuditLog(ctx, order.ID, "MANUAL_PAYMENT_PROOF_SUBMITTED", fmt.Sprintf("user:%d", userID), map[string]any{
 		"paymentSource": meta.PaymentSource,
 		"proofNote":     meta.ProofNote,
+	})
+	return updated, nil
+}
+
+func (s *PaymentService) UpdateManualPaymentSource(ctx context.Context, orderID, userID int64, req UpdateManualPaymentSourceRequest) (*dbent.PaymentOrder, error) {
+	order, err := s.GetOrder(ctx, orderID, userID)
+	if err != nil {
+		return nil, err
+	}
+	meta := extractManualPaymentOrderMeta(order)
+	if !isManualPaymentSource(meta.PaymentSource) {
+		return nil, infraerrors.BadRequest("INVALID_MANUAL_PAYMENT_ORDER", "order is not a manual payment order")
+	}
+	if order.Status != OrderStatusPending {
+		return nil, infraerrors.BadRequest("INVALID_STATUS", "manual payment source can only be changed for pending orders")
+	}
+	if meta.ReviewStatus == ManualReviewStatusPendingAdmin {
+		return nil, infraerrors.BadRequest("MANUAL_PAYMENT_ALREADY_SUBMITTED", "payment proof already submitted; cannot change payment source")
+	}
+
+	nextSource := NormalizePaymentSource(req.PaymentSource)
+	manualCfg, err := s.configService.GetManualPaymentConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if manualCfg == nil || !manualCfg.Enabled {
+		return nil, infraerrors.Forbidden("MANUAL_PAYMENT_DISABLED", "manual qr payment is disabled")
+	}
+	switch nextSource {
+	case PaymentSourceManualAlipay:
+		if !manualCfg.AlipayEnabled || strings.TrimSpace(manualCfg.AlipayQRCodeImageURL) == "" {
+			return nil, infraerrors.Forbidden("MANUAL_PAYMENT_METHOD_DISABLED", "manual alipay payment is unavailable")
+		}
+	case PaymentSourceManualWxpay:
+		if !manualCfg.WechatEnabled || strings.TrimSpace(manualCfg.WechatQRCodeImageURL) == "" {
+			return nil, infraerrors.Forbidden("MANUAL_PAYMENT_METHOD_DISABLED", "manual wechat payment is unavailable")
+		}
+	default:
+		return nil, infraerrors.BadRequest("INVALID_PAYMENT_SOURCE", "unsupported manual payment source")
+	}
+
+	meta.PaymentSource = nextSource
+	meta.QRCodeImageURL = manualPaymentQRCodeForSource(manualCfg, nextSource)
+	if meta.ReviewStatus == "" {
+		meta.ReviewStatus = initialManualReviewStatus(meta.RequireProof)
+	}
+
+	updated, err := s.entClient.PaymentOrder.UpdateOneID(order.ID).
+		SetPaymentType(manualPaymentTypeFromSource(nextSource)).
+		SetProviderSnapshot(mergeManualPaymentOrderMeta(order.ProviderSnapshot, meta)).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("update manual payment source: %w", err)
+	}
+	s.writeAuditLog(ctx, order.ID, "MANUAL_PAYMENT_SOURCE_CHANGED", fmt.Sprintf("user:%d", userID), map[string]any{
+		"paymentSource": nextSource,
 	})
 	return updated, nil
 }

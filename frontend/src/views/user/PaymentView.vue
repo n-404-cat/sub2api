@@ -18,6 +18,10 @@
             v-if="manualPaymentOrder"
             :order="manualPaymentOrder"
             :help-text="checkout.manual_payment.help_text"
+            :available-methods="{
+              alipay: checkout.manual_payment.alipay_enabled,
+              wechat: checkout.manual_payment.wechat_enabled,
+            }"
             @updated="handleManualPaymentUpdated"
           />
           <PaymentStatusPanel

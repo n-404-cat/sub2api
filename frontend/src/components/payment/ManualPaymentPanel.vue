@@ -3,6 +3,37 @@
     <div class="card p-6">
       <div class="flex flex-col gap-6 lg:flex-row">
         <div class="flex-1 space-y-4">
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-if="availableMethods.alipay"
+              type="button"
+              :class="[
+                'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                currentSource === 'manual_alipay'
+                  ? 'border-[#02A9F1] bg-blue-50 text-[#02A9F1] dark:bg-blue-950/20'
+                  : 'border-gray-300 text-gray-600 hover:border-gray-400 dark:border-dark-600 dark:text-gray-300'
+              ]"
+              :disabled="switching || currentSource === 'manual_alipay' || !canSwitchSource"
+              @click="switchSource('manual_alipay')"
+            >
+              {{ t('payment.methods.alipay') }}
+            </button>
+            <button
+              v-if="availableMethods.wechat"
+              type="button"
+              :class="[
+                'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                currentSource === 'manual_wxpay'
+                  ? 'border-[#09BB07] bg-green-50 text-[#09BB07] dark:bg-green-950/20'
+                  : 'border-gray-300 text-gray-600 hover:border-gray-400 dark:border-dark-600 dark:text-gray-300'
+              ]"
+              :disabled="switching || currentSource === 'manual_wxpay' || !canSwitchSource"
+              @click="switchSource('manual_wxpay')"
+            >
+              {{ localText('微信支付', 'WeChat Pay') }}
+            </button>
+          </div>
+
           <div>
             <p class="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
               {{ paymentMethodLabel }}
@@ -140,6 +171,10 @@ import { extractI18nErrorMessage } from '@/utils/apiError'
 const props = defineProps<{
   order: PaymentOrder
   helpText?: string
+  availableMethods?: {
+    alipay?: boolean
+    wechat?: boolean
+  }
 }>()
 
 const emit = defineEmits<{
@@ -152,6 +187,7 @@ const appStore = useAppStore()
 const proofImage = ref('')
 const proofNote = ref('')
 const submitting = ref(false)
+const switching = ref(false)
 
 watch(
   () => props.order.manual_payment?.proof_note,
@@ -174,6 +210,8 @@ const manualPayment = computed(() => props.order.manual_payment ?? {
 })
 
 const status = computed(() => manualPayment.value.review_status || '')
+const currentSource = computed(() => manualPayment.value.payment_source || 'manual_alipay')
+const canSwitchSource = computed(() => status.value !== 'PENDING_ADMIN_REVIEW')
 const showProofForm = computed(() =>
   props.order.status === 'PENDING'
   && manualPayment.value.require_proof !== false
@@ -265,6 +303,21 @@ async function submitProof() {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   } finally {
     submitting.value = false
+  }
+}
+
+async function switchSource(source: 'manual_alipay' | 'manual_wxpay') {
+  if (switching.value || currentSource.value === source || !canSwitchSource.value) return
+  switching.value = true
+  try {
+    const res = await paymentAPI.updateManualPaymentSource(props.order.id, {
+      payment_source: source,
+    })
+    emit('updated', res.data)
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    switching.value = false
   }
 }
 </script>

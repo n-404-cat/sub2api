@@ -392,6 +392,10 @@ type SubmitManualPaymentProofBody struct {
 	ProofNote     string `json:"proof_note"`
 }
 
+type UpdateManualPaymentSourceBody struct {
+	PaymentSource string `json:"payment_source"`
+}
+
 // RequestRefund submits a refund request for a completed order.
 // POST /api/v1/payment/orders/:id/refund-request
 func (h *PaymentHandler) RequestRefund(c *gin.Context) {
@@ -442,6 +446,36 @@ func (h *PaymentHandler) SubmitManualPaymentProof(c *gin.Context) {
 	order, err := h.paymentService.SubmitManualPaymentProof(c.Request.Context(), orderID, subject.UserID, service.SubmitManualProofRequest{
 		ProofImageURL: req.ProofImageURL,
 		ProofNote:     req.ProofNote,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, sanitizePaymentOrderForResponse(order))
+}
+
+// UpdateManualPaymentSource switches between manual Alipay/WeChat QR codes for the same order.
+// POST /api/v1/payment/orders/:id/manual-source
+func (h *PaymentHandler) UpdateManualPaymentSource(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+
+	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid order ID")
+		return
+	}
+
+	var req UpdateManualPaymentSourceBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	order, err := h.paymentService.UpdateManualPaymentSource(c.Request.Context(), orderID, subject.UserID, service.UpdateManualPaymentSourceRequest{
+		PaymentSource: req.PaymentSource,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
