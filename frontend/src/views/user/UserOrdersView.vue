@@ -18,7 +18,7 @@
       <OrderTable :orders="orders" :loading="loading">
         <template #actions="{ row }">
           <div class="flex items-center gap-2">
-            <button v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
+            <button v-if="canCancelOrder(row)" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
               <Icon name="x" size="sm" />
               <span>{{ t('payment.orders.cancel') }}</span>
             </button>
@@ -139,8 +139,21 @@ function handlePageSizeChange(size: number) { pagination.page_size = size; pagin
 
 function handleCancel(orderId: number) { cancelTargetId.value = orderId }
 
+function canCancelOrder(order: PaymentOrder): boolean {
+  if (order.status !== 'PENDING') return false
+  if (order.manual_payment?.enabled && order.manual_payment.review_status === 'PENDING_ADMIN_REVIEW') {
+    return false
+  }
+  return true
+}
+
 async function confirmCancel() {
   if (!cancelTargetId.value) return
+  const target = orders.value.find((item) => item.id === cancelTargetId.value)
+  if (target && !canCancelOrder(target)) {
+    cancelTargetId.value = null
+    return
+  }
   actionLoading.value = true
   try {
     await paymentAPI.cancelOrder(cancelTargetId.value)

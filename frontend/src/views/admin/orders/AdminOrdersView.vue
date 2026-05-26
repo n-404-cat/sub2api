@@ -82,8 +82,8 @@
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedOrder.out_trade_no }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.status') }}</p><OrderStatusBadge :status="selectedOrder.status" /></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedOrder.order_type === 'balance' ? '$' : '¥' }}{{ selectedOrder.amount.toFixed(2) }}</p></div>
-          <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.payAmount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">¥{{ selectedOrder.pay_amount.toFixed(2) }}</p></div>
-          <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + selectedOrder.payment_type, selectedOrder.payment_type) }}</p></div>
+          <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.payAmount') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ formatMoneyWithUnit(selectedOrder.pay_amount, selectedOrder.order_type) }}</p></div>
+          <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + selectedOrder.payment_type, selectedOrder.payment_type) }}<span v-if="selectedOrder.manual_payment?.enabled" class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ localText('人工', 'Manual') }}</span></p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.feeRate') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.fee_rate }}%</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.createdAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(selectedOrder.created_at) }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.expiresAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(selectedOrder.expires_at) }}</p></div>
@@ -95,11 +95,11 @@
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('支付来源', 'Payment source') }}</p>
-                <p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.manual_payment.payment_source }}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ formatManualPaymentSource(selectedOrder.manual_payment.payment_source) }}</p>
               </div>
               <div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('审核状态', 'Review status') }}</p>
-                <p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.manual_payment.review_status }}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ formatManualReviewStatus(selectedOrder.manual_payment.review_status) }}</p>
               </div>
               <div v-if="selectedOrder.manual_payment.proof_note" class="col-span-2">
                 <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('付款备注', 'Proof note') }}</p>
@@ -111,7 +111,7 @@
               </div>
               <div v-if="selectedOrder.manual_payment.proof_image_url" class="col-span-2">
                 <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">{{ localText('付款凭证', 'Payment proof') }}</p>
-                <img :src="selectedOrder.manual_payment.proof_image_url" alt="" class="max-h-72 rounded-lg border border-gray-200 object-contain dark:border-dark-700" />
+                <img :src="selectedOrder.manual_payment.proof_image_url" alt="" class="max-h-72 cursor-zoom-in rounded-lg border border-gray-200 object-contain dark:border-dark-700" @click="previewImage = selectedOrder.manual_payment?.proof_image_url || ''" />
               </div>
             </div>
           </div>
@@ -140,11 +140,11 @@
           <div class="max-h-48 space-y-2 overflow-y-auto">
             <div v-for="log in orderAuditLogs" :key="log.id" class="rounded-lg border border-gray-100 bg-gray-50 p-2.5 dark:border-dark-600 dark:bg-dark-800">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ log.action }}</span>
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ formatAuditAction(log.action) }}</span>
                 <span class="text-xs text-gray-400">{{ formatDateTime(log.created_at) }}</span>
               </div>
-              <div v-if="log.detail" class="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">{{ log.detail }}</div>
-              <div v-if="log.operator" class="mt-1 text-xs text-gray-400">{{ t('payment.admin.operator') }}: {{ log.operator }}</div>
+              <div v-if="log.detail" class="mt-1 whitespace-pre-wrap break-all text-xs text-gray-500 dark:text-gray-400">{{ formatAuditDetail(log) }}</div>
+              <div v-if="log.operator" class="mt-1 text-xs text-gray-400">{{ localText('操作人', 'Operator') }}: {{ formatOperator(log.operator) }}</div>
             </div>
           </div>
         </div>
@@ -160,6 +160,21 @@
       @confirm="handleManualReviewConfirm"
       @cancel="showManualReviewDialog = false"
     />
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="previewImage"
+          class="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4"
+          @click="previewImage = ''"
+        >
+          <img
+            :src="previewImage"
+            alt=""
+            class="max-h-[92vh] max-w-[92vw] rounded-2xl bg-white object-contain shadow-2xl"
+          />
+        </div>
+      </Transition>
+    </Teleport>
   </AppLayout>
 </template>
 
@@ -216,6 +231,7 @@ const showManualReviewDialog = ref(false)
 const manualReviewApproved = ref(true)
 const manualReviewSubmitting = ref(false)
 const orderAuditLogs = ref<AuditLog[]>([])
+const previewImage = ref('')
 
 function localText(zh: string, en: string): string {
   return String(locale.value || '').startsWith('zh') ? zh : en
@@ -340,6 +356,84 @@ async function handleRefund(data: { amount: number; reason: string; deduct_balan
 }
 
 function formatDateTime(dateStr: string): string { return formatOrderDateTime(dateStr) }
+
+function formatOperator(operator?: string | null): string {
+  if (!operator) return '-'
+  if (operator === 'admin') return localText('管理员', 'Admin')
+  if (operator.startsWith('user:')) return `${localText('用户', 'User')} ${operator.slice(5)}`
+  return operator
+}
+
+function formatManualPaymentSource(source?: string): string {
+  switch (source) {
+    case 'manual_alipay':
+      return localText('人工支付宝', 'Manual Alipay')
+    case 'manual_wxpay':
+      return localText('人工微信', 'Manual WeChat')
+    default:
+      return source || '-'
+  }
+}
+
+function formatManualReviewStatus(status?: string): string {
+  switch (status) {
+    case 'PENDING_USER_PROOF':
+      return localText('待提交凭证', 'Pending proof')
+    case 'PENDING_ADMIN_REVIEW':
+      return localText('待管理员审核', 'Pending admin review')
+    case 'APPROVED':
+      return localText('已审核通过', 'Approved')
+    case 'REJECTED':
+      return localText('已拒绝', 'Rejected')
+    default:
+      return status || '-'
+  }
+}
+
+function formatMoneyWithUnit(amount?: number, orderType?: string): string {
+  const value = Number(amount || 0)
+  return `${orderType === 'balance' ? '$' : '¥'}${value.toFixed(2)}`
+}
+
+function formatAuditAction(action: string): string {
+  const map: Record<string, string> = {
+    ORDER_CREATED: localText('创建订单', 'Order created'),
+    MANUAL_PAYMENT_PROOF_SUBMITTED: localText('用户提交付款凭证', 'Payment proof submitted'),
+    MANUAL_PAYMENT_SOURCE_CHANGED: localText('切换人工支付方式', 'Manual payment source changed'),
+    MANUAL_PAYMENT_APPROVED: localText('人工审核通过', 'Manual payment approved'),
+    MANUAL_PAYMENT_REJECTED: localText('人工审核拒绝', 'Manual payment rejected'),
+    MANUAL_PAYMENT_APPROVAL_FULFILLMENT_SUCCEEDED: localText('审核通过后已完成入账', 'Fulfillment succeeded after approval'),
+    MANUAL_PAYMENT_APPROVAL_FULFILLMENT_FAILED: localText('审核通过后入账失败', 'Fulfillment failed after approval'),
+    MANUAL_REFUND_MARKED: localText('已登记线下人工退款', 'Offline manual refund recorded'),
+    REFUND_REQUESTED: localText('用户申请退款', 'Refund requested'),
+    REFUND_SUCCESS: localText('退款成功', 'Refund successful'),
+    REFUND_FAILED: localText('退款失败', 'Refund failed'),
+  }
+  return map[action] || action
+}
+
+function formatAuditDetail(log: AuditLog): string {
+  if (!log.detail) return ''
+  try {
+    const data = JSON.parse(log.detail) as Record<string, unknown>
+    const lines: string[] = []
+    if (data.paymentSource) lines.push(`${localText('支付来源', 'Payment source')}: ${formatManualPaymentSource(String(data.paymentSource))}`)
+    if (data.paymentType) lines.push(`${localText('支付方式', 'Payment method')}: ${String(data.paymentType)}`)
+    if (typeof data.paymentAmount === 'number') lines.push(`${localText('支付金额', 'Payment amount')}: ¥${Number(data.paymentAmount).toFixed(2)}`)
+    if (typeof data.payAmount === 'number') lines.push(`${localText('实付金额', 'Actual paid')}: ¥${Number(data.payAmount).toFixed(2)}`)
+    if (typeof data.creditedAmount === 'number') lines.push(`${localText('到账金额', 'Credited amount')}: ${Number(data.creditedAmount).toFixed(2)}`)
+    if (data.orderType) lines.push(`${localText('订单类型', 'Order type')}: ${String(data.orderType) === 'subscription' ? localText('订阅套餐', 'Subscription') : localText('余额充值', 'Balance top-up')}`)
+    if (data.proofNote) lines.push(`${localText('用户备注', 'User note')}: ${String(data.proofNote)}`)
+    if (data.reviewNote) lines.push(`${localText('审核备注', 'Review note')}: ${String(data.reviewNote)}`)
+    if (data.reason) lines.push(`${localText('原因', 'Reason')}: ${String(data.reason)}`)
+    if (typeof data.refundAmount === 'number') lines.push(`${localText('退款金额', 'Refund amount')}: ¥${Number(data.refundAmount).toFixed(2)}`)
+    if (data.mode) lines.push(`${localText('退款方式', 'Refund mode')}: ${String(data.mode) === 'offline_manual_refund' ? localText('线下人工退款', 'Offline manual refund') : String(data.mode)}`)
+    if (data.result) lines.push(`${localText('结果', 'Result')}: ${String(data.result)}`)
+    return lines.length > 0 ? lines.join('\n') : log.detail
+  } catch {
+    return log.detail
+  }
+}
 
 onMounted(() => loadOrders())
 </script>

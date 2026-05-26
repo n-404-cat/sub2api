@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :show="show"
-    :title="t('payment.admin.refundOrder')"
+    :title="isManualPayment ? localText('登记人工退款', 'Record manual refund') : t('payment.admin.refundOrder')"
     width="normal"
     @close="emit('cancel')"
   >
@@ -48,7 +48,7 @@
       </div>
 
       <!-- Deduct Balance -->
-      <div>
+      <div v-if="!isManualPayment">
         <div class="flex items-center gap-2">
           <input
             id="deduct-balance"
@@ -132,7 +132,7 @@
       </div>
 
       <!-- Force Refund -->
-      <div v-if="requireForce" class="flex items-center gap-2">
+      <div v-if="requireForce && !isManualPayment" class="flex items-center gap-2">
         <input
           id="force-refund"
           v-model="form.force"
@@ -156,7 +156,7 @@
           :disabled="submitting || form.amount <= 0 || (requireForce && !form.force)"
           class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 dark:focus:ring-offset-dark-800"
         >
-          {{ submitting ? t('common.processing') : t('payment.admin.confirmRefund') }}
+          {{ submitting ? t('common.processing') : (isManualPayment ? localText('登记退款', 'Record refund') : t('payment.admin.confirmRefund')) }}
         </button>
       </div>
     </template>
@@ -170,7 +170,7 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import type { PaymentOrder } from '@/types/payment'
 import { formatOrderDateTime } from '@/components/payment/orderUtils'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps<{
   show: boolean
@@ -192,6 +192,8 @@ const form = reactive({
   deduct_balance: true,
   force: false,
 })
+
+const isManualPayment = computed(() => props.order?.manual_payment?.enabled === true)
 
 // In REFUND_REQUESTED status, refund_amount is the REQUESTED amount, not actually refunded.
 // Only PARTIALLY_REFUNDED / REFUNDED have real refund amounts.
@@ -221,10 +223,14 @@ watch(() => props.show, (val) => {
       form.amount = maxRefundable.value
     }
     form.reason = props.order.refund_request_reason || ''
-    form.deduct_balance = true
+    form.deduct_balance = !isManualPayment.value
     form.force = false
   }
 })
+
+function localText(zh: string, en: string): string {
+  return String(locale.value || '').startsWith('zh') ? zh : en
+}
 
 function formatDateTime(dateStr: string): string {
   return formatOrderDateTime(dateStr)

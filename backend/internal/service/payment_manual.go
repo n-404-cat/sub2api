@@ -515,10 +515,21 @@ func (s *PaymentService) ReviewManualPayment(ctx context.Context, orderID int64,
 		s.writeAuditLog(ctx, order.ID, "MANUAL_PAYMENT_APPROVED", req.Operator, map[string]any{
 			"paymentSource": meta.PaymentSource,
 			"reviewNote":    meta.ReviewNote,
+			"result":        "approved",
 		})
 		if err := s.executeFulfillment(ctx, updated.ID); err != nil {
+			s.writeAuditLog(ctx, order.ID, "MANUAL_PAYMENT_APPROVAL_FULFILLMENT_FAILED", req.Operator, map[string]any{
+				"paymentSource": meta.PaymentSource,
+				"reviewNote":    meta.ReviewNote,
+				"reason":        err.Error(),
+			})
 			return nil, err
 		}
+		s.writeAuditLog(ctx, order.ID, "MANUAL_PAYMENT_APPROVAL_FULFILLMENT_SUCCEEDED", req.Operator, map[string]any{
+			"paymentSource": meta.PaymentSource,
+			"reviewNote":    meta.ReviewNote,
+			"result":        "fulfilled",
+		})
 		return s.GetOrderByID(ctx, updated.ID)
 	}
 
@@ -532,6 +543,7 @@ func (s *PaymentService) ReviewManualPayment(ctx context.Context, orderID int64,
 	s.writeAuditLog(ctx, order.ID, "MANUAL_PAYMENT_REJECTED", req.Operator, map[string]any{
 		"paymentSource": meta.PaymentSource,
 		"reviewNote":    meta.ReviewNote,
+		"result":        "rejected",
 	})
 	return updated, nil
 }

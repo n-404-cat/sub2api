@@ -207,6 +207,34 @@ func (s *PaymentService) PrepareRefund(ctx context.Context, oid int64, amt float
 	if !psSliceContains(ok, o.Status) {
 		return nil, nil, infraerrors.BadRequest("INVALID_STATUS", "order status does not allow refund")
 	}
+	if isManualPaymentSource(extractManualPaymentOrderMeta(o).PaymentSource) {
+		if math.IsNaN(amt) || math.IsInf(amt, 0) {
+			return nil, nil, infraerrors.BadRequest("INVALID_AMOUNT", "invalid refund amount")
+		}
+		if amt <= 0 {
+			amt = o.Amount
+		}
+		if amt > o.Amount {
+			return nil, nil, infraerrors.BadRequest("REFUND_AMOUNT_EXCEEDED", "refund amount exceeds recharge")
+		}
+		rr := strings.TrimSpace(reason)
+		if rr == "" && o.RefundRequestReason != nil {
+			rr = *o.RefundRequestReason
+		}
+		if rr == "" {
+			rr = fmt.Sprintf("manual refund order:%d", o.ID)
+		}
+		return &RefundPlan{
+			OrderID:      oid,
+			Order:        o,
+			RefundAmount: amt,
+			GatewayAmount: 0,
+			Reason:       rr,
+			Force:        force,
+			DeductBalance: false,
+			DeductionType: payment.DeductionTypeNone,
+		}, nil, nil
+	}
 	// Check provider instance allows admin refund
 	inst, instErr := s.getRefundOrderProviderInstance(ctx, o)
 	if instErr != nil {
@@ -280,6 +308,9 @@ func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*Ref
 	}
 	if c == 0 {
 		return nil, infraerrors.Conflict("CONFLICT", "order status changed")
+	}
+	if isManualPaymentSource(extractManualPaymentOrderMeta(p.Order).PaymentSource) {
+		return s.executeManualRefund(ctx, p)
 	}
 	if p.DeductionType == payment.DeductionTypeBalance && p.BalanceToDeduct > 0 {
 		// Skip balance deduction on retry if previous attempt already deducted
@@ -426,6 +457,30 @@ func (s *PaymentService) RollbackRefund(ctx context.Context, p *RefundPlan, gErr
 		}
 	}
 	return true
+}
+
+func (s *PaymentService) executeManualRefund(ctx context.Context, p *RefundPlan) (*RefundResult, error) {
+	fs := OrderStatusRefunded
+	if p.RefundAmount < p.Order.Amount {
+		fs = OrderStatusPartiallyRefunded
+	}
+	now := time.Now()
+	_, err := s.entClient.PaymentOrder.UpdateOneID(p.OrderID).
+		SetStatus(fs).
+		SetRefundAmount(p.RefundAmount).
+		SetRefundReason(p.Reason).
+		SetRefundAt(now).
+		SetForceRefund(p.Force).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mark manual refund: %w", err)
+	}
+	s.writeAuditLog(ctx, p.OrderID, "MANUAL_REFUND_MARKED", "admin", map[string]any{
+		"refundAmount": p.RefundAmount,
+		"reason":       p.Reason,
+		"mode":         "offline_manual_refund",
+	})
+	return &RefundResult{Success: true}, nil
 }
 
 func (s *PaymentService) restoreStatus(ctx context.Context, p *RefundPlan) {
