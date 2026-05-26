@@ -231,7 +231,7 @@ services:
     networks:
       - sub2api-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ${REDISCLI_AUTH:+-a \"$REDISCLI_AUTH\"} ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
