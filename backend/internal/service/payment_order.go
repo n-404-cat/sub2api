@@ -13,6 +13,8 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	entsql "entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -920,7 +922,7 @@ func (s *PaymentService) GetUserOrders(ctx context.Context, userID int64, p Orde
 		q = q.Where(paymentorder.OrderTypeEQ(p.OrderType))
 	}
 	if p.PaymentType != "" {
-		q = q.Where(paymentorder.PaymentTypeEQ(p.PaymentType))
+		q = applyPaymentTypeFilter(q, p.PaymentType)
 	}
 	total, err := q.Clone().Count(ctx)
 	if err != nil {
@@ -947,7 +949,7 @@ func (s *PaymentService) AdminListOrders(ctx context.Context, userID int64, p Or
 		q = q.Where(paymentorder.OrderTypeEQ(p.OrderType))
 	}
 	if p.PaymentType != "" {
-		q = q.Where(paymentorder.PaymentTypeEQ(p.PaymentType))
+		q = applyPaymentTypeFilter(q, p.PaymentType)
 	}
 	if p.Keyword != "" {
 		q = q.Where(paymentorder.Or(
@@ -966,4 +968,25 @@ func (s *PaymentService) AdminListOrders(ctx context.Context, userID int64, p Or
 		return nil, 0, fmt.Errorf("query admin orders: %w", err)
 	}
 	return orders, total, nil
+}
+
+func applyPaymentTypeFilter(q *dbent.PaymentOrderQuery, paymentType string) *dbent.PaymentOrderQuery {
+	switch strings.TrimSpace(paymentType) {
+	case PaymentSourceManualAlipay:
+		return q.Where(
+			paymentorder.PaymentTypeEQ(payment.TypeAlipay),
+			paymentorder.Predicate(func(s *entsql.Selector) {
+				s.Where(sqljson.ValueEQ(paymentorder.FieldProviderSnapshot, PaymentSourceManualAlipay, sqljson.Path("manual_payment", "payment_source")))
+			}),
+		)
+	case PaymentSourceManualWxpay:
+		return q.Where(
+			paymentorder.PaymentTypeEQ(payment.TypeWxpay),
+			paymentorder.Predicate(func(s *entsql.Selector) {
+				s.Where(sqljson.ValueEQ(paymentorder.FieldProviderSnapshot, PaymentSourceManualWxpay, sqljson.Path("manual_payment", "payment_source")))
+			}),
+		)
+	default:
+		return q.Where(paymentorder.PaymentTypeEQ(paymentType))
+	}
 }

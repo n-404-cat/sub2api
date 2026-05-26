@@ -23,11 +23,27 @@
         </div>
       </div>
     </template>
-    <template #cell-payment_type="{ value }">
-      <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + value, value) }}</span>
+    <template #cell-payment_type="{ value, row }">
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + value, value) }}</span>
+        <span
+          v-if="row.manual_payment?.enabled"
+          class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+        >
+          {{ localeText('人工', 'Manual') }}
+        </span>
+      </div>
     </template>
-    <template #cell-status="{ value }">
-      <OrderStatusBadge :status="value" />
+    <template #cell-status="{ value, row }">
+      <div class="space-y-1">
+        <OrderStatusBadge :status="value" />
+        <div
+          v-if="row.manual_payment?.enabled"
+          class="text-[11px] text-gray-500 dark:text-gray-400"
+        >
+          {{ manualReviewStatusLabel(row.manual_payment.review_status) }}
+        </div>
+      </div>
     </template>
     <template #cell-created_at="{ value }">
       <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(value) }}</span>
@@ -46,7 +62,7 @@ import type { Column } from '@/components/common/types'
 import DataTable from '@/components/common/DataTable.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const props = defineProps<{
   orders: PaymentOrder[]
@@ -55,6 +71,25 @@ const props = defineProps<{
 }>()
 
 function formatDate(dateStr: string) { return new Date(dateStr).toLocaleString() }
+
+function localeText(zh: string, en: string): string {
+  return String(locale.value || '').startsWith('zh') ? zh : en
+}
+
+function manualReviewStatusLabel(status?: string): string {
+  switch (status) {
+    case 'PENDING_USER_PROOF':
+      return localeText('待用户提交凭证', 'Waiting for proof')
+    case 'PENDING_ADMIN_REVIEW':
+      return localeText('待管理员审核', 'Pending admin review')
+    case 'APPROVED':
+      return localeText('人工审核已通过', 'Manual review approved')
+    case 'REJECTED':
+      return localeText('人工审核已拒绝', 'Manual review rejected')
+    default:
+      return localeText('人工充值', 'Manual top-up')
+  }
+}
 
 const columns = computed((): Column[] => {
   const cols: Column[] = [

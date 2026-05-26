@@ -18,6 +18,9 @@
               <Icon v-if="selected" name="check" size="sm" class="text-primary-500" :stroke-width="2" />
             </template>
           </Select>
+          <p v-if="groupOptions.length === 0" class="mt-2 text-xs text-amber-600 dark:text-amber-300">
+            {{ localText('没有可选分组。请先到“分组管理”创建状态为 active、类型为 subscription 的分组。', 'No eligible groups found. Create an active group with subscription_type=subscription in Group Management first.') }}
+          </p>
         </div>
       </div>
 
@@ -101,7 +104,7 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const appStore = useAppStore()
 
 const saving = ref(false)
@@ -128,6 +131,10 @@ const selectedGroupInfo = computed(() => {
   if (!planForm.group_id) return null
   return props.groups.find(g => g.id === planForm.group_id) || null
 })
+
+function localText(zh: string, en: string): string {
+  return String(locale.value || '').startsWith('zh') ? zh : en
+}
 
 // Reset form when dialog opens
 watch(() => props.show, (visible) => {

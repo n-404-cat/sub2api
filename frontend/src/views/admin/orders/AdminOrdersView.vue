@@ -9,13 +9,16 @@
           </div>
           <Select v-model="orderFilters.status" :options="statusFilterOptions" class="w-36" @change="loadOrders" />
           <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" class="w-40" @change="loadOrders" />
-          <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" class="w-36" @change="loadOrders" />
+          <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" class="w-52" @change="loadOrders" />
           <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
             <button @click="loadOrders" :disabled="ordersLoading" class="btn btn-secondary" :title="t('common.refresh')">
               <Icon name="refresh" size="md" :class="ordersLoading ? 'animate-spin' : ''" />
             </button>
           </div>
         </div>
+        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {{ localText('人工充值订单会归类在支付宝/微信支付方式下，并带有“人工”标记。', 'Manual top-up orders are listed under Alipay or WeChat Pay and marked as Manual.') }}
+        </p>
       </div>
 
       <!-- Table -->
@@ -149,6 +152,14 @@
     </BaseDialog>
 
     <AdminRefundDialog :show="showRefundDialog" :order="selectedOrder" :submitting="refundSubmitting" @confirm="handleRefund" @cancel="showRefundDialog = false" />
+    <AdminManualReviewDialog
+      :show="showManualReviewDialog"
+      :order="selectedOrder"
+      :approved="manualReviewApproved"
+      :submitting="manualReviewSubmitting"
+      @confirm="handleManualReviewConfirm"
+      @cancel="showManualReviewDialog = false"
+    />
   </AppLayout>
 </template>
 
@@ -166,6 +177,7 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import AdminRefundDialog from '@/components/admin/payment/AdminRefundDialog.vue'
+import AdminManualReviewDialog from '@/components/admin/payment/AdminManualReviewDialog.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import OrderTable from '@/components/payment/OrderTable.vue'
 
@@ -200,6 +212,9 @@ const selectedOrder = ref<PaymentOrder | null>(null)
 const showDetailDialog = ref(false)
 const showRefundDialog = ref(false)
 const refundSubmitting = ref(false)
+const showManualReviewDialog = ref(false)
+const manualReviewApproved = ref(true)
+const manualReviewSubmitting = ref(false)
 const orderAuditLogs = ref<AuditLog[]>([])
 
 function localText(zh: string, en: string): string {
@@ -247,6 +262,8 @@ const paymentTypeFilterOptions = computed(() => [
   { value: '', label: t('payment.admin.allPaymentTypes') },
   { value: 'alipay', label: t('payment.methods.alipay') },
   { value: 'wxpay', label: t('payment.methods.wxpay') },
+  { value: 'manual_alipay', label: localText('人工支付宝', 'Manual Alipay') },
+  { value: 'manual_wxpay', label: localText('人工微信', 'Manual WeChat') },
   { value: 'stripe', label: t('payment.methods.stripe') },
   { value: 'airwallex', label: t('payment.methods.airwallex') },
 ])
@@ -280,26 +297,33 @@ async function handleRetryOrder(order: PaymentOrder) {
 }
 
 async function reviewManualPayment(order: PaymentOrder, approved: boolean) {
-  const note = window.prompt(
-    approved
-      ? localText('审核备注（可选）', 'Review note (optional)')
-      : localText('请输入拒绝原因', 'Enter rejection reason'),
-    ''
-  )
-  if (note === null) return
+  selectedOrder.value = order
+  manualReviewApproved.value = approved
+  showManualReviewDialog.value = true
+}
+
+async function handleManualReviewConfirm(payload: { note?: string }) {
+  if (!selectedOrder.value) return
+  manualReviewSubmitting.value = true
   try {
-    await adminPaymentAPI.reviewManualPayment(order.id, {
-      approved,
-      note: note || undefined,
+    await adminPaymentAPI.reviewManualPayment(selectedOrder.value.id, {
+      approved: manualReviewApproved.value,
+      note: payload.note,
     })
     appStore.showSuccess(
-      approved
+      manualReviewApproved.value
         ? localText('已审核通过', 'Approved')
         : localText('已拒绝该凭证', 'Rejected')
     )
-    loadOrders()
+    showManualReviewDialog.value = false
+    await loadOrders()
+    if (selectedOrder.value) {
+      await showOrderDetail(selectedOrder.value)
+    }
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    manualReviewSubmitting.value = false
   }
 }
 

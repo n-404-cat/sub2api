@@ -2,11 +2,16 @@
   <AppLayout>
     <div class="space-y-4">
       <!-- Actions -->
-      <div class="flex items-center justify-end gap-2">
-        <button @click="loadPlans" :disabled="plansLoading" class="btn btn-secondary" :title="t('common.refresh')">
-          <Icon name="refresh" size="md" :class="plansLoading ? 'animate-spin' : ''" />
-        </button>
-        <button @click="openPlanEdit(null)" class="btn btn-primary">{{ t('payment.admin.createPlan') }}</button>
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="rounded-xl border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-600 dark:border-dark-600 dark:text-gray-300">
+          {{ localText('套餐就是前台订阅页展示的商品。若“分组”下拉为空，请先到“分组管理”创建状态为 active、类型为 subscription 的分组。', 'Plans are the products shown on the frontend subscription page. If the group dropdown is empty, first create an active group with subscription_type=subscription in Group Management.') }}
+        </div>
+        <div class="flex items-center justify-end gap-2">
+          <button @click="loadPlans" :disabled="plansLoading" class="btn btn-secondary" :title="t('common.refresh')">
+            <Icon name="refresh" size="md" :class="plansLoading ? 'animate-spin' : ''" />
+          </button>
+          <button @click="openPlanEdit(null)" class="btn btn-primary">{{ t('payment.admin.createPlan') }}</button>
+        </div>
       </div>
 
       <!-- Plans Table -->
@@ -91,8 +96,12 @@ import GroupBadge from '@/components/common/GroupBadge.vue'
 import PlanEditDialog from './PlanEditDialog.vue'
 import { platformTextClass } from '@/utils/platformColors'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const appStore = useAppStore()
+
+function localText(zh: string, en: string): string {
+  return String(locale.value || '').startsWith('zh') ? zh : en
+}
 
 // ==================== Groups ====================
 

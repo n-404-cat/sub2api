@@ -209,6 +209,24 @@ func (s *PaymentService) resolveManualPaymentSource(ctx context.Context, req Cre
 	if method != payment.TypeAlipay && method != payment.TypeWxpay {
 		return source, nil, nil
 	}
+	if s != nil && s.configService != nil {
+		manualCfg, err := s.configService.GetManualPaymentConfig(ctx)
+		if err != nil {
+			return source, nil, err
+		}
+		if manualCfg != nil && manualCfg.Enabled {
+			switch method {
+			case payment.TypeAlipay:
+				if manualCfg.AlipayEnabled && strings.TrimSpace(manualCfg.AlipayQRCodeImageURL) != "" {
+					return PaymentSourceManualAlipay, manualCfg, nil
+				}
+			case payment.TypeWxpay:
+				if manualCfg.WechatEnabled && strings.TrimSpace(manualCfg.WechatQRCodeImageURL) != "" {
+					return PaymentSourceManualWxpay, manualCfg, nil
+				}
+			}
+		}
+	}
 	if s == nil || s.configService == nil || s.configService.settingRepo == nil {
 		return source, nil, nil
 	}
