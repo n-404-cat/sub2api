@@ -975,16 +975,16 @@ func applyPaymentTypeFilter(q *dbent.PaymentOrderQuery, paymentType string) *dbe
 	case PaymentSourceManualAlipay:
 		return q.Where(
 			paymentorder.PaymentTypeEQ(payment.TypeAlipay),
-			paymentorder.Predicate(func(s *entsql.Selector) {
+			func(s *entsql.Selector) {
 				s.Where(sqljson.ValueEQ(paymentorder.FieldProviderSnapshot, PaymentSourceManualAlipay, sqljson.Path("manual_payment", "payment_source")))
-			}),
+			},
 		)
 	case PaymentSourceManualWxpay:
 		return q.Where(
 			paymentorder.PaymentTypeEQ(payment.TypeWxpay),
-			paymentorder.Predicate(func(s *entsql.Selector) {
+			func(s *entsql.Selector) {
 				s.Where(sqljson.ValueEQ(paymentorder.FieldProviderSnapshot, PaymentSourceManualWxpay, sqljson.Path("manual_payment", "payment_source")))
-			}),
+			},
 		)
 	default:
 		return q.Where(paymentorder.PaymentTypeEQ(paymentType))
