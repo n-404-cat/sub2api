@@ -162,7 +162,7 @@ func NormalizeVisibleMethodSource(method, source string) string {
 			return VisibleMethodSourceOfficialAlipay
 		case VisibleMethodSourceEasyPayAlipay, payment.TypeEasyPay:
 			return VisibleMethodSourceEasyPayAlipay
-		case VisibleMethodSourceManualAlipay, PaymentSourceManualAlipay, "manual":
+		case VisibleMethodSourceManualAlipay, "manual":
 			return VisibleMethodSourceManualAlipay
 		}
 	case payment.TypeWxpay:
@@ -171,7 +171,7 @@ func NormalizeVisibleMethodSource(method, source string) string {
 			return VisibleMethodSourceOfficialWechat
 		case VisibleMethodSourceEasyPayWechat, payment.TypeEasyPay:
 			return VisibleMethodSourceEasyPayWechat
-		case VisibleMethodSourceManualWechat, PaymentSourceManualWxpay, "manual":
+		case VisibleMethodSourceManualWechat, "manual":
 			return VisibleMethodSourceManualWechat
 		}
 	}
