@@ -168,14 +168,20 @@ import type { PaymentOrder } from '@/types/payment'
 import { useAppStore } from '@/stores'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   order: PaymentOrder
   helpText?: string
   availableMethods?: {
     alipay?: boolean
     wechat?: boolean
   }
-}>()
+}>(), {
+  helpText: '',
+  availableMethods: () => ({
+    alipay: false,
+    wechat: false,
+  }),
+})
 
 const emit = defineEmits<{
   (e: 'updated', order: PaymentOrder): void
