@@ -14,7 +14,14 @@
         </div>
         <!-- Payment in progress (shared by recharge and subscription) -->
         <template v-if="paymentPhase === 'paying'">
+          <ManualPaymentPanel
+            v-if="manualPaymentOrder"
+            :order="manualPaymentOrder"
+            :help-text="checkout.manual_payment.help_text"
+            @updated="handleManualPaymentUpdated"
+          />
           <PaymentStatusPanel
+            v-else
             :order-id="paymentState.orderId"
             :qr-code="paymentState.qrCode"
             :expires-at="paymentState.expiresAt"
@@ -255,7 +262,7 @@ import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
-import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
+import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType, ManualPaymentOrderMeta } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import PaymentMethodSelector from '@/components/payment/PaymentMethodSelector.vue'
@@ -274,9 +281,11 @@ import {
 import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
+import ManualPaymentPanel from '@/components/payment/ManualPaymentPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
+import type { PaymentOrder } from '@/types/payment'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
 import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
 
@@ -306,6 +315,8 @@ const amount = ref<number | null>(null)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
 const previewImage = ref('')
+const manualPaymentOrder = ref<PaymentOrder | null>(null)
+let manualPaymentPollTimer: ReturnType<typeof setInterval> | null = null
 
 const paymentPhase = ref<'select' | 'paying'>('select')
 
@@ -397,6 +408,11 @@ function removeRecoverySnapshot() {
 function resetPayment() {
   paymentPhase.value = 'select'
   paymentState.value = emptyPaymentState()
+  manualPaymentOrder.value = null
+  if (manualPaymentPollTimer) {
+    clearInterval(manualPaymentPollTimer)
+    manualPaymentPollTimer = null
+  }
   removeRecoverySnapshot()
 }
 
@@ -475,10 +491,75 @@ function onPaymentSettled() {
   removeRecoverySnapshot()
 }
 
+function handleManualPaymentUpdated(order: PaymentOrder) {
+  manualPaymentOrder.value = order
+}
+
+function startManualPaymentPolling() {
+  if (manualPaymentPollTimer) {
+    clearInterval(manualPaymentPollTimer)
+    manualPaymentPollTimer = null
+  }
+  if (!manualPaymentOrder.value?.id) return
+  manualPaymentPollTimer = setInterval(async () => {
+    const latest = await paymentStore.pollOrderStatus(manualPaymentOrder.value!.id)
+    if (!latest) return
+    manualPaymentOrder.value = latest
+    if (latest.status === 'COMPLETED' || latest.status === 'PAID' || latest.status === 'RECHARGING') {
+      onPaymentSuccess()
+      onPaymentDone()
+    }
+  }, 3000)
+}
+
+function buildManualPaymentOrderFromResult(result: CreateOrderResult, orderType: OrderType): PaymentOrder | null {
+  const manual = result.manual_payment as ManualPaymentOrderMeta | undefined
+  if (!manual?.enabled) return null
+  return {
+    id: result.order_id,
+    user_id: user.value?.id || 0,
+    amount: result.amount,
+    pay_amount: result.pay_amount,
+    currency: result.currency || selectedCurrency.value,
+    fee_rate: result.fee_rate,
+    payment_type: result.payment_type || selectedMethod.value,
+    out_trade_no: result.out_trade_no || '',
+    status: 'PENDING',
+    order_type: orderType,
+    created_at: new Date().toISOString(),
+    expires_at: result.expires_at,
+    refund_amount: 0,
+    refund_reason: undefined,
+    refund_requested_at: undefined,
+    refund_requested_by: undefined,
+    refund_request_reason: undefined,
+    plan_id: orderType === 'subscription' ? selectedPlan.value?.id : undefined,
+    provider_instance_id: undefined,
+    manual_payment: manual,
+  }
+}
+
 // All checkout data from single API call
 const checkout = ref<CheckoutInfoResponse>({
   methods: {}, global_min: 0, global_max: 0,
-  plans: [], balance_disabled: false, balance_recharge_multiplier: 1, recharge_fee_rate: 0, help_text: '', help_image_url: '', stripe_publishable_key: '',
+  plans: [],
+  balance_disabled: false,
+  balance_recharge_multiplier: 1,
+  recharge_fee_rate: 0,
+  help_text: '',
+  help_image_url: '',
+  stripe_publishable_key: '',
+  manual_payment: {
+    enabled: false,
+    require_proof: true,
+    alipay_enabled: false,
+    wechat_enabled: false,
+    alipay_qr_code_image_url: '',
+    wechat_qr_code_image_url: '',
+    help_text: '',
+    review_timeout_minutes: 1440,
+  },
+  alipay_force_qrcode: false,
 })
 
 const tabs = computed(() => {
@@ -767,9 +848,14 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       return
     }
 
+    manualPaymentOrder.value = buildManualPaymentOrderFromResult(result, orderType)
     paymentState.value = decision.paymentState
     paymentPhase.value = 'paying'
     persistRecoverySnapshot(decision.recovery)
+    if (manualPaymentOrder.value) {
+      startManualPaymentPolling()
+      return
+    }
 
     if (decision.kind === 'stripe_popup') {
       openWindow(decision.paymentState.payUrl)
@@ -1046,6 +1132,12 @@ onMounted(async () => {
         const restoredMethod = normalizeVisibleMethod(restored.paymentType)
         if (restoredMethod) {
           selectedMethod.value = restoredMethod
+        }
+        if (restored.paymentMode === 'manual_qr' && restored.orderId > 0) {
+          manualPaymentOrder.value = await paymentStore.pollOrderStatus(restored.orderId)
+          if (manualPaymentOrder.value) {
+            startManualPaymentPolling()
+          }
         }
       } else {
         removeRecoverySnapshot()

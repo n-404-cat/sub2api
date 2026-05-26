@@ -34,6 +34,22 @@
               <Icon name="refresh" size="sm" />
               {{ t('payment.admin.retry') }}
             </button>
+            <button
+              v-if="row.status === 'PENDING' && row.manual_payment?.enabled && row.manual_payment.review_status === 'PENDING_ADMIN_REVIEW'"
+              @click="reviewManualPayment(row, true)"
+              class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+            >
+              <Icon name="check" size="sm" />
+              {{ localText('通过', 'Approve') }}
+            </button>
+            <button
+              v-if="row.status === 'PENDING' && row.manual_payment?.enabled && row.manual_payment.review_status === 'PENDING_ADMIN_REVIEW'"
+              @click="reviewManualPayment(row, false)"
+              class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+            >
+              <Icon name="x" size="sm" />
+              {{ localText('拒绝', 'Reject') }}
+            </button>
             <template v-if="row.status === 'REFUND_REQUESTED'">
               <span v-if="row.refund_amount" class="rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">{{ row.order_type === 'balance' ? '$' : '¥' }}{{ row.refund_amount.toFixed(2) }}</span>
               <button @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
@@ -71,6 +87,31 @@
           <div v-if="selectedOrder.paid_at"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.paidAt') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(selectedOrder.paid_at) }}</p></div>
           <div v-if="selectedOrder.refund_amount"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.refundAmount') }}</p><p class="text-sm font-medium text-red-600 dark:text-red-400">{{ selectedOrder.order_type === 'balance' ? '$' : '¥' }}{{ selectedOrder.refund_amount.toFixed(2) }}</p></div>
           <div v-if="selectedOrder.refund_reason" class="col-span-2"><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.refundReason') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.refund_reason }}</p></div>
+          <div v-if="selectedOrder.manual_payment?.enabled" class="col-span-2 border-t border-gray-200 pt-3 dark:border-dark-600">
+            <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{{ localText('人工充值信息', 'Manual payment details') }}</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('支付来源', 'Payment source') }}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.manual_payment.payment_source }}</p>
+              </div>
+              <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('审核状态', 'Review status') }}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.manual_payment.review_status }}</p>
+              </div>
+              <div v-if="selectedOrder.manual_payment.proof_note" class="col-span-2">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('付款备注', 'Proof note') }}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.manual_payment.proof_note }}</p>
+              </div>
+              <div v-if="selectedOrder.manual_payment.review_note" class="col-span-2">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('审核备注', 'Review note') }}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedOrder.manual_payment.review_note }}</p>
+              </div>
+              <div v-if="selectedOrder.manual_payment.proof_image_url" class="col-span-2">
+                <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">{{ localText('付款凭证', 'Payment proof') }}</p>
+                <img :src="selectedOrder.manual_payment.proof_image_url" alt="" class="max-h-72 rounded-lg border border-gray-200 object-contain dark:border-dark-700" />
+              </div>
+            </div>
+          </div>
           <!-- Refund request info -->
           <div v-if="selectedOrder.refund_requested_at" class="col-span-2 border-t border-gray-200 pt-3 dark:border-dark-600">
             <p class="mb-2 text-xs font-medium text-purple-600 dark:text-purple-400">{{ t('payment.admin.refundRequestInfo') }}</p>
@@ -136,7 +177,18 @@ interface AuditLog {
   created_at: string
 }
 
-const { t } = useI18n()
+function normalizeAdminOrder(order: PaymentOrder & Record<string, unknown>): PaymentOrder {
+  const providerSnapshot = order.provider_snapshot as Record<string, unknown> | undefined
+  if (!order.manual_payment && providerSnapshot?.manual_payment) {
+    return {
+      ...order,
+      manual_payment: providerSnapshot.manual_payment as PaymentOrder['manual_payment'],
+    }
+  }
+  return order
+}
+
+const { t, locale } = useI18n()
 const appStore = useAppStore()
 
 const ordersLoading = ref(false)
@@ -149,6 +201,10 @@ const showDetailDialog = ref(false)
 const showRefundDialog = ref(false)
 const refundSubmitting = ref(false)
 const orderAuditLogs = ref<AuditLog[]>([])
+
+function localText(zh: string, en: string): string {
+  return String(locale.value || '').startsWith('zh') ? zh : en
+}
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 function debounceLoadOrders() {
@@ -164,7 +220,7 @@ async function loadOrders() {
       keyword: orderSearch.value || undefined, status: orderFilters.status || undefined,
       payment_type: orderFilters.payment_type || undefined, order_type: orderFilters.order_type || undefined,
     })
-    orders.value = res.data.items || []
+    orders.value = (res.data.items || []).map((item) => normalizeAdminOrder(item as PaymentOrder & Record<string, unknown>))
     orderPagination.total = res.data.total || 0
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
@@ -208,7 +264,7 @@ async function showOrderDetail(order: PaymentOrder) {
   try {
     const res = await adminPaymentAPI.getOrder(order.id)
     const data = res.data as unknown as Record<string, unknown>
-    if (data.order) selectedOrder.value = data.order as PaymentOrder
+    if (data.order) selectedOrder.value = normalizeAdminOrder(data.order as PaymentOrder & Record<string, unknown>)
     orderAuditLogs.value = ((data.auditLogs || data.audit_logs || []) as unknown) as AuditLog[]
   } catch (_err: unknown) { /* keep cached order data */ }
 }
@@ -221,6 +277,30 @@ async function handleCancelOrder(order: PaymentOrder) {
 async function handleRetryOrder(order: PaymentOrder) {
   try { await adminPaymentAPI.retryRecharge(order.id); appStore.showSuccess(t('payment.admin.retrySuccess')); loadOrders() }
   catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
+}
+
+async function reviewManualPayment(order: PaymentOrder, approved: boolean) {
+  const note = window.prompt(
+    approved
+      ? localText('审核备注（可选）', 'Review note (optional)')
+      : localText('请输入拒绝原因', 'Enter rejection reason'),
+    ''
+  )
+  if (note === null) return
+  try {
+    await adminPaymentAPI.reviewManualPayment(order.id, {
+      approved,
+      note: note || undefined,
+    })
+    appStore.showSuccess(
+      approved
+        ? localText('已审核通过', 'Approved')
+        : localText('已拒绝该凭证', 'Rejected')
+    )
+    loadOrders()
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  }
 }
 
 function openRefundDialog(order: PaymentOrder) { selectedOrder.value = order; showRefundDialog.value = true }

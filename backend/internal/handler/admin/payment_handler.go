@@ -131,7 +131,13 @@ func sanitizeAdminPaymentOrderForResponse(order *dbent.PaymentOrder) *dbent.Paym
 		return nil
 	}
 	cloned := *order
-	cloned.ProviderSnapshot = nil
+	if meta := service.ExtractManualPaymentOrderMetaForResponse(order); meta.Enabled {
+		cloned.ProviderSnapshot = map[string]any{
+			"manual_payment": meta,
+		}
+	} else {
+		cloned.ProviderSnapshot = nil
+	}
 	return &cloned
 }
 
@@ -141,6 +147,11 @@ type AdminProcessRefundRequest struct {
 	Reason        string  `json:"reason"`
 	Force         bool    `json:"force"`
 	DeductBalance bool    `json:"deduct_balance"`
+}
+
+type AdminReviewManualPaymentRequest struct {
+	Approved bool   `json:"approved"`
+	Note     string `json:"note"`
 }
 
 // ProcessRefund processes a refund for an order (admin).
@@ -173,6 +184,32 @@ func (h *PaymentHandler) ProcessRefund(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+// ReviewManualPayment approves or rejects a manual QR payment order.
+// POST /api/v1/admin/payment/orders/:id/manual-review
+func (h *PaymentHandler) ReviewManualPayment(c *gin.Context) {
+	orderID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var req AdminReviewManualPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	order, err := h.paymentService.ReviewManualPayment(c.Request.Context(), orderID, service.ReviewManualPaymentRequest{
+		Approved: req.Approved,
+		Note:     req.Note,
+		Operator: "admin",
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, sanitizeAdminPaymentOrderForResponse(order))
 }
 
 // --- Subscription Plans ---

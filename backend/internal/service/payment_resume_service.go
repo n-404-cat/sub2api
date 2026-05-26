@@ -31,8 +31,10 @@ const (
 
 	VisibleMethodSourceOfficialAlipay = "official_alipay"
 	VisibleMethodSourceEasyPayAlipay  = "easypay_alipay"
+	VisibleMethodSourceManualAlipay   = "manual_alipay"
 	VisibleMethodSourceOfficialWechat = "official_wxpay"
 	VisibleMethodSourceEasyPayWechat  = "easypay_wxpay"
+	VisibleMethodSourceManualWechat   = "manual_wxpay"
 
 	wechatPaymentResumeTokenType = "wechat_payment_resume"
 
@@ -143,6 +145,10 @@ func NormalizePaymentSource(source string) string {
 		return PaymentSourceHostedRedirect
 	case "wechat_in_app", "wxpay_resume", PaymentSourceWechatInAppResume:
 		return PaymentSourceWechatInAppResume
+	case PaymentSourceManualAlipay:
+		return PaymentSourceManualAlipay
+	case PaymentSourceManualWxpay:
+		return PaymentSourceManualWxpay
 	default:
 		return strings.TrimSpace(strings.ToLower(source))
 	}
@@ -156,6 +162,8 @@ func NormalizeVisibleMethodSource(method, source string) string {
 			return VisibleMethodSourceOfficialAlipay
 		case VisibleMethodSourceEasyPayAlipay, payment.TypeEasyPay:
 			return VisibleMethodSourceEasyPayAlipay
+		case VisibleMethodSourceManualAlipay, PaymentSourceManualAlipay, "manual":
+			return VisibleMethodSourceManualAlipay
 		}
 	case payment.TypeWxpay:
 		switch strings.TrimSpace(strings.ToLower(source)) {
@@ -163,6 +171,8 @@ func NormalizeVisibleMethodSource(method, source string) string {
 			return VisibleMethodSourceOfficialWechat
 		case VisibleMethodSourceEasyPayWechat, payment.TypeEasyPay:
 			return VisibleMethodSourceEasyPayWechat
+		case VisibleMethodSourceManualWechat, PaymentSourceManualWxpay, "manual":
+			return VisibleMethodSourceManualWechat
 		}
 	}
 	return ""
@@ -174,10 +184,14 @@ func VisibleMethodProviderKeyForSource(method, source string) (string, bool) {
 		return payment.TypeAlipay, NormalizeVisibleMethod(method) == payment.TypeAlipay
 	case VisibleMethodSourceEasyPayAlipay:
 		return payment.TypeEasyPay, NormalizeVisibleMethod(method) == payment.TypeAlipay
+	case VisibleMethodSourceManualAlipay:
+		return "", NormalizeVisibleMethod(method) == payment.TypeAlipay
 	case VisibleMethodSourceOfficialWechat:
 		return payment.TypeWxpay, NormalizeVisibleMethod(method) == payment.TypeWxpay
 	case VisibleMethodSourceEasyPayWechat:
 		return payment.TypeEasyPay, NormalizeVisibleMethod(method) == payment.TypeWxpay
+	case VisibleMethodSourceManualWechat:
+		return "", NormalizeVisibleMethod(method) == payment.TypeWxpay
 	default:
 		return "", false
 	}

@@ -6003,6 +6003,102 @@
                     ></textarea>
                   </div>
                 </div>
+                <div class="rounded-xl border border-dashed border-gray-300 p-4 dark:border-dark-600">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <label class="font-medium text-gray-900 dark:text-white">
+                        {{ localText("人工二维码充值", "Manual QR recharge") }}
+                      </label>
+                      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        {{
+                          localText(
+                            "允许用户通过个人支付宝/微信收款码转账，提交凭证后由管理员审核入账。",
+                            "Let users pay to personal Alipay/WeChat QR codes, then submit proof for admin review.",
+                          )
+                        }}
+                      </p>
+                    </div>
+                    <Toggle v-model="form.manual_payment_enabled" />
+                  </div>
+
+                  <div
+                    v-if="form.manual_payment_enabled"
+                    class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2"
+                  >
+                    <div class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                      <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {{ localText("支付宝人工充值", "Manual Alipay") }}
+                        </label>
+                        <Toggle v-model="form.manual_payment_alipay_enabled" />
+                      </div>
+                      <ImageUpload
+                        v-model="form.manual_payment_alipay_qr_code_image_url"
+                        :upload-label="t('admin.settings.site.uploadImage')"
+                        :remove-label="t('admin.settings.site.remove')"
+                        :placeholder="localText('上传支付宝收款二维码', 'Upload Alipay QR image')"
+                      />
+                    </div>
+
+                    <div class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                      <div class="flex items-center justify-between">
+                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {{ localText("微信人工充值", "Manual WeChat") }}
+                        </label>
+                        <Toggle v-model="form.manual_payment_wechat_enabled" />
+                      </div>
+                      <ImageUpload
+                        v-model="form.manual_payment_wechat_qr_code_image_url"
+                        :upload-label="t('admin.settings.site.uploadImage')"
+                        :remove-label="t('admin.settings.site.remove')"
+                        :placeholder="localText('上传微信收款二维码', 'Upload WeChat QR image')"
+                      />
+                    </div>
+
+                    <div class="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div>
+                        <label class="input-label">
+                          {{ localText("审核说明", "Review instructions") }}
+                        </label>
+                        <textarea
+                          v-model="form.manual_payment_help_text"
+                          rows="4"
+                          class="input"
+                          :placeholder="
+                            localText(
+                              '例如：转账后请上传截图，并在备注里填写付款时间。',
+                              'For example: upload the transfer screenshot and include payment time in the note.',
+                            )
+                          "
+                        ></textarea>
+                      </div>
+                      <div class="space-y-4">
+                        <div class="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 dark:border-dark-700">
+                          <div>
+                            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {{ localText("要求上传付款凭证", "Require payment proof") }}
+                            </label>
+                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                              {{ localText("关闭后下单即进入待审核。", "If disabled, orders go straight to admin review.") }}
+                            </p>
+                          </div>
+                          <Toggle v-model="form.manual_payment_require_proof" />
+                        </div>
+                        <div>
+                          <label class="input-label">
+                            {{ localText("审核超时(分钟)", "Review timeout (minutes)") }}
+                          </label>
+                          <input
+                            v-model.number="form.manual_payment_review_timeout_minutes"
+                            type="number"
+                            min="1"
+                            class="input"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </template>
             </div>
           </div>
@@ -6881,6 +6977,14 @@ const form = reactive<SettingsForm>({
   payment_enabled_types: [],
   payment_help_image_url: "",
   payment_help_text: "",
+  manual_payment_enabled: false,
+  manual_payment_require_proof: true,
+  manual_payment_alipay_enabled: false,
+  manual_payment_wechat_enabled: false,
+  manual_payment_alipay_qr_code_image_url: "",
+  manual_payment_wechat_qr_code_image_url: "",
+  manual_payment_help_text: "",
+  manual_payment_review_timeout_minutes: 1440,
   payment_product_name_prefix: "",
   payment_product_name_suffix: "",
   payment_load_balance_strategy: "round-robin",
@@ -8152,6 +8256,17 @@ async function saveSettings() {
       payment_product_name_suffix: form.payment_product_name_suffix,
       payment_help_image_url: form.payment_help_image_url,
       payment_help_text: form.payment_help_text,
+      manual_payment_enabled: form.manual_payment_enabled,
+      manual_payment_require_proof: form.manual_payment_require_proof,
+      manual_payment_alipay_enabled: form.manual_payment_alipay_enabled,
+      manual_payment_wechat_enabled: form.manual_payment_wechat_enabled,
+      manual_payment_alipay_qr_code_image_url:
+        form.manual_payment_alipay_qr_code_image_url,
+      manual_payment_wechat_qr_code_image_url:
+        form.manual_payment_wechat_qr_code_image_url,
+      manual_payment_help_text: form.manual_payment_help_text,
+      manual_payment_review_timeout_minutes:
+        Number(form.manual_payment_review_timeout_minutes) || 1440,
       payment_cancel_rate_limit_enabled: form.payment_cancel_rate_limit_enabled,
       payment_cancel_rate_limit_max:
         Number(form.payment_cancel_rate_limit_max) || 10,

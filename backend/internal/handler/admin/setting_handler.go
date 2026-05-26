@@ -283,6 +283,14 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentProductNameSuffix:               paymentCfg.ProductNameSuffix,
 		PaymentHelpImageURL:                    paymentCfg.HelpImageURL,
 		PaymentHelpText:                        paymentCfg.HelpText,
+		ManualPaymentEnabled:                   paymentCfg.ManualPayment.Enabled,
+		ManualPaymentRequireProof:              paymentCfg.ManualPayment.RequireProof,
+		ManualPaymentAlipayEnabled:             paymentCfg.ManualPayment.AlipayEnabled,
+		ManualPaymentWechatEnabled:             paymentCfg.ManualPayment.WechatEnabled,
+		ManualPaymentAlipayQRCodeImageURL:      paymentCfg.ManualPayment.AlipayQRCodeImageURL,
+		ManualPaymentWechatQRCodeImageURL:      paymentCfg.ManualPayment.WechatQRCodeImageURL,
+		ManualPaymentHelpText:                  paymentCfg.ManualPayment.HelpText,
+		ManualPaymentReviewTimeoutMinutes:      paymentCfg.ManualPayment.ReviewTimeoutMinutes,
 		PaymentCancelRateLimitEnabled:          paymentCfg.CancelRateLimitEnabled,
 		PaymentCancelRateLimitMax:              paymentCfg.CancelRateLimitMax,
 		PaymentCancelRateLimitWindow:           paymentCfg.CancelRateLimitWindow,
@@ -611,6 +619,14 @@ type UpdateSettingsRequest struct {
 	PaymentProductNameSuffix         *string  `json:"payment_product_name_suffix"`
 	PaymentHelpImageURL              *string  `json:"payment_help_image_url"`
 	PaymentHelpText                  *string  `json:"payment_help_text"`
+	ManualPaymentEnabled             *bool    `json:"manual_payment_enabled"`
+	ManualPaymentRequireProof        *bool    `json:"manual_payment_require_proof"`
+	ManualPaymentAlipayEnabled       *bool    `json:"manual_payment_alipay_enabled"`
+	ManualPaymentWechatEnabled       *bool    `json:"manual_payment_wechat_enabled"`
+	ManualPaymentAlipayQRCodeImageURL *string `json:"manual_payment_alipay_qr_code_image_url"`
+	ManualPaymentWechatQRCodeImageURL *string `json:"manual_payment_wechat_qr_code_image_url"`
+	ManualPaymentHelpText            *string  `json:"manual_payment_help_text"`
+	ManualPaymentReviewTimeoutMinutes *int    `json:"manual_payment_review_timeout_minutes"`
 
 	// Cancel rate limit
 	PaymentCancelRateLimitEnabled *bool   `json:"payment_cancel_rate_limit_enabled"`
@@ -1815,6 +1831,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			ProductNameSuffix:         req.PaymentProductNameSuffix,
 			HelpImageURL:              req.PaymentHelpImageURL,
 			HelpText:                  req.PaymentHelpText,
+			ManualPaymentEnabled:      req.ManualPaymentEnabled,
+			ManualPaymentRequireProof: req.ManualPaymentRequireProof,
+			ManualPaymentAlipayEnabled: req.ManualPaymentAlipayEnabled,
+			ManualPaymentWechatEnabled: req.ManualPaymentWechatEnabled,
+			ManualPaymentAlipayQRImageURL: req.ManualPaymentAlipayQRCodeImageURL,
+			ManualPaymentWechatQRImageURL: req.ManualPaymentWechatQRCodeImageURL,
+			ManualPaymentHelpText:     req.ManualPaymentHelpText,
+			ManualPaymentReviewTimeoutMins: req.ManualPaymentReviewTimeoutMinutes,
 			CancelRateLimitEnabled:    req.PaymentCancelRateLimitEnabled,
 			CancelRateLimitMax:        req.PaymentCancelRateLimitMax,
 			CancelRateLimitWindow:     req.PaymentCancelRateLimitWindow,
@@ -2026,6 +2050,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentProductNameSuffix:               updatedPaymentCfg.ProductNameSuffix,
 		PaymentHelpImageURL:                    updatedPaymentCfg.HelpImageURL,
 		PaymentHelpText:                        updatedPaymentCfg.HelpText,
+		ManualPaymentEnabled:                   updatedPaymentCfg.ManualPayment.Enabled,
+		ManualPaymentRequireProof:              updatedPaymentCfg.ManualPayment.RequireProof,
+		ManualPaymentAlipayEnabled:             updatedPaymentCfg.ManualPayment.AlipayEnabled,
+		ManualPaymentWechatEnabled:             updatedPaymentCfg.ManualPayment.WechatEnabled,
+		ManualPaymentAlipayQRCodeImageURL:      updatedPaymentCfg.ManualPayment.AlipayQRCodeImageURL,
+		ManualPaymentWechatQRCodeImageURL:      updatedPaymentCfg.ManualPayment.WechatQRCodeImageURL,
+		ManualPaymentHelpText:                  updatedPaymentCfg.ManualPayment.HelpText,
+		ManualPaymentReviewTimeoutMinutes:      updatedPaymentCfg.ManualPayment.ReviewTimeoutMinutes,
 		PaymentCancelRateLimitEnabled:          updatedPaymentCfg.CancelRateLimitEnabled,
 		PaymentCancelRateLimitMax:              updatedPaymentCfg.CancelRateLimitMax,
 		PaymentCancelRateLimitWindow:           updatedPaymentCfg.CancelRateLimitWindow,
@@ -2071,7 +2103,11 @@ func hasPaymentFields(req UpdateSettingsRequest) bool {
 		req.PaymentBalanceRechargeMultiplier != nil || req.PaymentRechargeFeeRate != nil ||
 		req.PaymentLoadBalanceStrat != nil || req.PaymentProductNamePrefix != nil ||
 		req.PaymentProductNameSuffix != nil || req.PaymentHelpImageURL != nil ||
-		req.PaymentHelpText != nil || req.PaymentCancelRateLimitEnabled != nil ||
+		req.PaymentHelpText != nil || req.ManualPaymentEnabled != nil ||
+		req.ManualPaymentRequireProof != nil || req.ManualPaymentAlipayEnabled != nil ||
+		req.ManualPaymentWechatEnabled != nil || req.ManualPaymentAlipayQRCodeImageURL != nil ||
+		req.ManualPaymentWechatQRCodeImageURL != nil || req.ManualPaymentHelpText != nil ||
+		req.ManualPaymentReviewTimeoutMinutes != nil || req.PaymentCancelRateLimitEnabled != nil ||
 		req.PaymentCancelRateLimitMax != nil || req.PaymentCancelRateLimitWindow != nil ||
 		req.PaymentCancelRateLimitUnit != nil || req.PaymentCancelRateLimitMode != nil ||
 		req.PaymentAlipayForceQRCode != nil

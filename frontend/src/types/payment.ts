@@ -20,6 +20,38 @@ export type OrderStatus =
 
 export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'airwallex'
 
+export type ManualReviewStatus =
+  | 'PENDING_USER_PROOF'
+  | 'PENDING_ADMIN_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+
+export interface ManualPaymentConfig {
+  enabled: boolean
+  require_proof: boolean
+  alipay_enabled: boolean
+  wechat_enabled: boolean
+  alipay_qr_code_image_url: string
+  wechat_qr_code_image_url: string
+  help_text: string
+  review_timeout_minutes: number
+}
+
+export interface ManualPaymentOrderMeta {
+  enabled: boolean
+  payment_source?: 'manual_alipay' | 'manual_wxpay'
+  review_status?: ManualReviewStatus
+  require_proof?: boolean
+  qr_code_image_url?: string
+  proof_image_url?: string
+  proof_note?: string
+  proof_submitted_at?: string
+  reviewed_at?: string
+  reviewed_by?: string
+  review_note?: string
+  review_timeout_minutes?: number
+}
+
 export type OrderType = 'balance' | 'subscription'
 
 // ==================== Configuration ====================
@@ -37,6 +69,7 @@ export interface PaymentConfig {
   help_image_url: string
   help_text: string
   stripe_publishable_key: string
+  manual_payment: ManualPaymentConfig
 }
 
 export interface MethodLimit {
@@ -69,6 +102,7 @@ export interface CheckoutInfoResponse {
   help_text: string
   help_image_url: string
   stripe_publishable_key: string
+  manual_payment: ManualPaymentConfig
   /** When true, Alipay payments on mobile always show the QR code instead of redirecting */
   alipay_force_qrcode?: boolean
 }
@@ -97,6 +131,7 @@ export interface PaymentOrder {
   refund_request_reason?: string
   plan_id?: number
   provider_instance_id?: string
+  manual_payment?: ManualPaymentOrderMeta
 }
 
 // ==================== Plans & Channels ====================
@@ -203,6 +238,7 @@ export interface CreateOrderResult {
   out_trade_no?: string
   payment_mode?: string
   resume_token?: string
+  manual_payment?: ManualPaymentOrderMeta
   oauth?: WechatOAuthInfo
   jsapi?: WechatJSAPIPayload
   jsapi_payload?: WechatJSAPIPayload

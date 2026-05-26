@@ -193,6 +193,16 @@ func (s *PaymentConfigService) resolveVisibleMethodProviderKey(
 			return "", err
 		}
 		if providerKey == "" {
+			sourceKey := visibleMethodSourceSettingKey(method)
+			if s != nil && s.settingRepo != nil && sourceKey != "" {
+				source, sourceErr := s.settingRepo.GetValue(ctx, sourceKey)
+				if sourceErr == nil {
+					switch NormalizeVisibleMethodSource(method, source) {
+					case VisibleMethodSourceManualAlipay, VisibleMethodSourceManualWechat:
+						return "", nil
+					}
+				}
+			}
 			return "", nil
 		}
 		selected := selectVisibleMethodInstanceByProviderKey(matching, providerKey)

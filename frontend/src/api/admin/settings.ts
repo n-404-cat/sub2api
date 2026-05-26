@@ -42,8 +42,10 @@ export type PaymentVisibleMethodSource =
   | ""
   | "official_alipay"
   | "easypay_alipay"
+  | "manual_alipay"
   | "official_wxpay"
-  | "easypay_wxpay";
+  | "easypay_wxpay"
+  | "manual_wxpay";
 export type WeChatConnectMode = "open" | "mp" | "mobile";
 
 export interface PaymentVisibleMethodSourceOption {
@@ -85,6 +87,11 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
       labelZh: "易支付支付宝",
       labelEn: "EasyPay Alipay",
     },
+    {
+      value: "manual_alipay",
+      labelZh: "人工支付宝",
+      labelEn: "Manual Alipay",
+    },
   ],
   wxpay: [
     { value: "", labelZh: "未配置", labelEn: "Not configured" },
@@ -97,6 +104,11 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
       value: "easypay_wxpay",
       labelZh: "易支付微信",
       labelEn: "EasyPay WeChat Pay",
+    },
+    {
+      value: "manual_wxpay",
+      labelZh: "人工微信",
+      labelEn: "Manual WeChat Pay",
     },
   ],
 };
@@ -111,6 +123,8 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
     official: "official_alipay",
     easypay_alipay: "easypay_alipay",
     easypay: "easypay_alipay",
+    manual_alipay: "manual_alipay",
+    manual: "manual_alipay",
   },
   wxpay: {
     official_wxpay: "official_wxpay",
@@ -120,6 +134,8 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
     official: "official_wxpay",
     easypay_wxpay: "easypay_wxpay",
     easypay: "easypay_wxpay",
+    manual_wxpay: "manual_wxpay",
+    manual: "manual_wxpay",
   },
 };
 const WECHAT_CONNECT_MODE_OPTIONS: WeChatConnectModeOption[] = [
@@ -525,6 +541,14 @@ export interface SystemSettings {
   payment_product_name_suffix: string;
   payment_help_image_url: string;
   payment_help_text: string;
+  manual_payment_enabled: boolean;
+  manual_payment_require_proof: boolean;
+  manual_payment_alipay_enabled: boolean;
+  manual_payment_wechat_enabled: boolean;
+  manual_payment_alipay_qr_code_image_url: string;
+  manual_payment_wechat_qr_code_image_url: string;
+  manual_payment_help_text: string;
+  manual_payment_review_timeout_minutes: number;
   payment_cancel_rate_limit_enabled: boolean;
   payment_cancel_rate_limit_max: number;
   payment_cancel_rate_limit_window: number;
@@ -746,6 +770,14 @@ export interface UpdateSettingsRequest {
   payment_product_name_suffix?: string;
   payment_help_image_url?: string;
   payment_help_text?: string;
+  manual_payment_enabled?: boolean;
+  manual_payment_require_proof?: boolean;
+  manual_payment_alipay_enabled?: boolean;
+  manual_payment_wechat_enabled?: boolean;
+  manual_payment_alipay_qr_code_image_url?: string;
+  manual_payment_wechat_qr_code_image_url?: string;
+  manual_payment_help_text?: string;
+  manual_payment_review_timeout_minutes?: number;
   payment_cancel_rate_limit_enabled?: boolean;
   payment_cancel_rate_limit_max?: number;
   payment_cancel_rate_limit_window?: number;

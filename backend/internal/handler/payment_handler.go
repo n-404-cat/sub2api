@@ -141,6 +141,7 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		HelpText:                  cfg.HelpText,
 		HelpImageURL:              cfg.HelpImageURL,
 		StripePublishableKey:      cfg.StripePublishableKey,
+		ManualPayment:             cfg.ManualPayment,
 		AlipayForceQRCode:         cfg.AlipayForceQRCode,
 	})
 }
@@ -156,6 +157,7 @@ type checkoutInfoResponse struct {
 	HelpText                  string                          `json:"help_text"`
 	HelpImageURL              string                          `json:"help_image_url"`
 	StripePublishableKey      string                          `json:"stripe_publishable_key"`
+	ManualPayment             service.ManualPaymentConfig     `json:"manual_payment"`
 	AlipayForceQRCode         bool                            `json:"alipay_force_qrcode"`
 }
 
@@ -385,6 +387,11 @@ type RefundRequestBody struct {
 	Reason string `json:"reason"`
 }
 
+type SubmitManualPaymentProofBody struct {
+	ProofImageURL string `json:"proof_image_url"`
+	ProofNote     string `json:"proof_note"`
+}
+
 // RequestRefund submits a refund request for a completed order.
 // POST /api/v1/payment/orders/:id/refund-request
 func (h *PaymentHandler) RequestRefund(c *gin.Context) {
@@ -410,6 +417,37 @@ func (h *PaymentHandler) RequestRefund(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "refund requested"})
+}
+
+// SubmitManualPaymentProof submits transfer proof for a manual QR payment order.
+// POST /api/v1/payment/orders/:id/manual-proof
+func (h *PaymentHandler) SubmitManualPaymentProof(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+
+	orderID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid order ID")
+		return
+	}
+
+	var req SubmitManualPaymentProofBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	order, err := h.paymentService.SubmitManualPaymentProof(c.Request.Context(), orderID, subject.UserID, service.SubmitManualProofRequest{
+		ProofImageURL: req.ProofImageURL,
+		ProofNote:     req.ProofNote,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, sanitizePaymentOrderForResponse(order))
 }
 
 // GetRefundEligibleProviders returns provider instance IDs that allow user refund.
@@ -476,6 +514,7 @@ type PublicOrderResult struct {
 	RefundRequestedBy   *string    `json:"refund_requested_by,omitempty"`
 	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
 	PlanID              *int64     `json:"plan_id,omitempty"`
+	ManualPayment       any        `json:"manual_payment,omitempty"`
 }
 
 func buildPublicOrderResult(order *dbent.PaymentOrder) PublicOrderResult {
@@ -499,6 +538,7 @@ func buildPublicOrderResult(order *dbent.PaymentOrder) PublicOrderResult {
 		RefundRequestedBy:   order.RefundRequestedBy,
 		RefundRequestReason: order.RefundRequestReason,
 		PlanID:              order.PlanID,
+		ManualPayment:       buildManualPaymentOrderMetaResponse(order),
 	}
 }
 
@@ -581,6 +621,7 @@ type PaymentOrderResult struct {
 	RefundRequestReason *string    `json:"refund_request_reason,omitempty"`
 	PlanID              *int64     `json:"plan_id,omitempty"`
 	ProviderInstanceID  *string    `json:"provider_instance_id,omitempty"`
+	ManualPayment       any        `json:"manual_payment,omitempty"`
 }
 
 func sanitizePaymentOrdersForResponse(orders []*dbent.PaymentOrder) []PaymentOrderResult {
@@ -619,7 +660,16 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 		RefundRequestReason: order.RefundRequestReason,
 		PlanID:              order.PlanID,
 		ProviderInstanceID:  order.ProviderInstanceID,
+		ManualPayment:       buildManualPaymentOrderMetaResponse(order),
 	}
+}
+
+func buildManualPaymentOrderMetaResponse(order *dbent.PaymentOrder) any {
+	meta := service.ExtractManualPaymentOrderMetaForResponse(order)
+	if !meta.Enabled {
+		return nil
+	}
+	return meta
 }
 
 func isWeChatBrowser(c *gin.Context) bool {

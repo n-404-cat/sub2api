@@ -27,12 +27,30 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if normalized := NormalizeVisibleMethod(req.PaymentType); normalized != "" {
 		req.PaymentType = normalized
 	}
+	resolvedSource, resolvedManualCfg, err := s.resolveManualPaymentSource(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if resolvedSource != "" {
+		req.PaymentSource = resolvedSource
+	}
 	cfg, err := s.configService.GetPaymentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get payment config: %w", err)
 	}
 	if !cfg.Enabled {
 		return nil, infraerrors.Forbidden("PAYMENT_DISABLED", "payment system is disabled")
+	}
+	manualCfg := resolvedManualCfg
+	if manualCfg == nil {
+		manualCfg, err = s.validateManualPaymentRequest(ctx, req, cfg)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err = s.validateManualPaymentRequest(ctx, req, cfg); err != nil {
+			return nil, err
+		}
 	}
 	plan, err := s.validateOrderInput(ctx, req, cfg)
 	if err != nil {
@@ -70,6 +88,13 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	payAmountStr, payAmount, err := calculateCreateOrderPayAmount(limitAmount, feeRate, methodCurrency)
 	if err != nil {
 		return nil, err
+	}
+	if manualCfg != nil {
+		order, err := s.createManualOrderInTx(ctx, req, user, plan, cfg, manualCfg, orderAmount, limitAmount, feeRate, payAmount)
+		if err != nil {
+			return nil, err
+		}
+		return s.buildManualCreateOrderResponse(order, req, manualCfg, payAmount), nil
 	}
 	sel, err := s.selectCreateOrderInstance(ctx, req, cfg, payAmount)
 	if err != nil {
@@ -110,6 +135,105 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		return nil, err
 	}
 	return resp, nil
+}
+
+func (s *PaymentService) createManualOrderInTx(
+	ctx context.Context,
+	req CreateOrderRequest,
+	user *User,
+	plan *dbent.SubscriptionPlan,
+	cfg *PaymentConfig,
+	manualCfg *ManualPaymentConfig,
+	orderAmount, limitAmount, feeRate, payAmount float64,
+) (*dbent.PaymentOrder, error) {
+	tx, err := s.entClient.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.checkPendingLimit(ctx, tx, req.UserID, cfg.MaxPendingOrders); err != nil {
+		return nil, err
+	}
+	if err := s.checkDailyLimit(ctx, tx, req.UserID, limitAmount, cfg.DailyLimit); err != nil {
+		return nil, err
+	}
+	tm := cfg.OrderTimeoutMin
+	if tm <= 0 {
+		tm = defaultOrderTimeoutMin
+	}
+	exp := time.Now().Add(time.Duration(tm) * time.Minute)
+	outTradeNo, err := s.allocateOutTradeNo(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	manualMeta := manualPaymentProviderSnapshot(manualCfg, req.PaymentSource)
+	b := tx.PaymentOrder.Create().
+		SetUserID(req.UserID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetNillableUserNotes(psNilIfEmpty(user.Notes)).
+		SetAmount(orderAmount).
+		SetPayAmount(payAmount).
+		SetFeeRate(feeRate).
+		SetRechargeCode("").
+		SetOutTradeNo(outTradeNo).
+		SetPaymentType(req.PaymentType).
+		SetPaymentTradeNo("").
+		SetOrderType(req.OrderType).
+		SetStatus(OrderStatusPending).
+		SetExpiresAt(exp).
+		SetClientIP(req.ClientIP).
+		SetSrcHost(req.SrcHost).
+		SetProviderSnapshot(manualMeta)
+	if req.SrcURL != "" {
+		b.SetSrcURL(req.SrcURL)
+	}
+	if plan != nil {
+		b.SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
+	}
+	order, err := b.Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create manual order: %w", err)
+	}
+	code := fmt.Sprintf("PAY-%d-%d", order.ID, time.Now().UnixNano()%100000)
+	order, err = tx.PaymentOrder.UpdateOneID(order.ID).SetRechargeCode(code).Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("set recharge code: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit manual order transaction: %w", err)
+	}
+	s.writeAuditLog(ctx, order.ID, "ORDER_CREATED", fmt.Sprintf("user:%d", req.UserID), map[string]any{
+		"paymentAmount":  req.Amount,
+		"creditedAmount": order.Amount,
+		"payAmount":      order.PayAmount,
+		"paymentType":    req.PaymentType,
+		"orderType":      req.OrderType,
+		"paymentSource":  NormalizePaymentSource(req.PaymentSource),
+		"manualPayment":  true,
+	})
+	return order, nil
+}
+
+func (s *PaymentService) buildManualCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest, cfg *ManualPaymentConfig, payAmount float64) *CreateOrderResponse {
+	meta := extractManualPaymentOrderMeta(order)
+	return &CreateOrderResponse{
+		OrderID:     order.ID,
+		Amount:      order.Amount,
+		PayAmount:   payAmount,
+		FeeRate:     order.FeeRate,
+		Status:      OrderStatusPending,
+		ResultType:  payment.CreatePaymentResultOrderCreated,
+		PaymentType: req.PaymentType,
+		OutTradeNo:  order.OutTradeNo,
+		QRCode:      meta.QRCodeImageURL,
+		ExpiresAt:   order.ExpiresAt,
+		PaymentMode: "manual_qr",
+		ManualPayment: func() *ManualPaymentOrderMetaResponse {
+			resp := ExtractManualPaymentOrderMetaForResponse(order)
+			return &resp
+		}(),
+	}
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {

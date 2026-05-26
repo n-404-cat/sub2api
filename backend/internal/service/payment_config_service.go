@@ -61,6 +61,7 @@ type PaymentConfig struct {
 	HelpImageURL              string   `json:"help_image_url"`
 	HelpText                  string   `json:"help_text"`
 	StripePublishableKey      string   `json:"stripe_publishable_key,omitempty"`
+	ManualPayment             ManualPaymentConfig `json:"manual_payment"`
 
 	// Cancel rate limit settings
 	CancelRateLimitEnabled bool   `json:"cancel_rate_limit_enabled"`
@@ -105,6 +106,15 @@ type UpdatePaymentConfigRequest struct {
 	VisibleMethodWxpaySource   *string `json:"payment_visible_method_wxpay_source"`
 	VisibleMethodAlipayEnabled *bool   `json:"payment_visible_method_alipay_enabled"`
 	VisibleMethodWxpayEnabled  *bool   `json:"payment_visible_method_wxpay_enabled"`
+
+	ManualPaymentEnabled            *bool   `json:"manual_payment_enabled"`
+	ManualPaymentRequireProof       *bool   `json:"manual_payment_require_proof"`
+	ManualPaymentAlipayEnabled      *bool   `json:"manual_payment_alipay_enabled"`
+	ManualPaymentWechatEnabled      *bool   `json:"manual_payment_wechat_enabled"`
+	ManualPaymentAlipayQRImageURL   *string `json:"manual_payment_alipay_qr_code_image_url"`
+	ManualPaymentWechatQRImageURL   *string `json:"manual_payment_wechat_qr_code_image_url"`
+	ManualPaymentHelpText           *string `json:"manual_payment_help_text"`
+	ManualPaymentReviewTimeoutMins  *int    `json:"manual_payment_review_timeout_minutes"`
 }
 
 // MethodLimits holds per-payment-type limits.
@@ -220,6 +230,13 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 	cfg := s.parsePaymentConfig(vals)
 	// Load Stripe publishable key from the first enabled Stripe provider instance
 	cfg.StripePublishableKey = s.getStripePublishableKey(ctx)
+	manualCfg, err := s.GetManualPaymentConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if manualCfg != nil {
+		cfg.ManualPayment = *manualCfg
+	}
 	return cfg, nil
 }
 
@@ -329,6 +346,14 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingPaymentVisibleMethodWxpaySource:   derefStr(req.VisibleMethodWxpaySource),
 		SettingPaymentVisibleMethodAlipayEnabled: formatBoolOrEmpty(req.VisibleMethodAlipayEnabled),
 		SettingPaymentVisibleMethodWxpayEnabled:  formatBoolOrEmpty(req.VisibleMethodWxpayEnabled),
+		SettingManualPaymentEnabled:              formatBoolOrEmpty(req.ManualPaymentEnabled),
+		SettingManualPaymentRequireProof:         formatBoolOrEmpty(req.ManualPaymentRequireProof),
+		SettingManualPaymentAlipayEnabled:        formatBoolOrEmpty(req.ManualPaymentAlipayEnabled),
+		SettingManualPaymentWechatEnabled:        formatBoolOrEmpty(req.ManualPaymentWechatEnabled),
+		SettingManualPaymentAlipayQRImageURL:     derefStr(req.ManualPaymentAlipayQRImageURL),
+		SettingManualPaymentWechatQRImageURL:     derefStr(req.ManualPaymentWechatQRImageURL),
+		SettingManualPaymentHelpText:             derefStr(req.ManualPaymentHelpText),
+		SettingManualPaymentReviewTimeoutMins:    formatPositiveInt(req.ManualPaymentReviewTimeoutMins),
 	}
 	if req.EnabledTypes != nil {
 		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")
@@ -437,6 +462,8 @@ func buildVisibleMethodSourceAvailability(instances []*dbent.PaymentProviderInst
 			}
 		}
 	}
+	available[VisibleMethodSourceManualAlipay] = true
+	available[VisibleMethodSourceManualWechat] = true
 	return available
 }
 

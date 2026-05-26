@@ -374,6 +374,10 @@ func (s *PaymentService) ExpireTimedOutOrders(ctx context.Context) (int, error) 
 	}
 	n := 0
 	for _, o := range orders {
+		meta := extractManualPaymentOrderMeta(o)
+		if isManualPaymentSource(meta.PaymentSource) && meta.ReviewStatus == ManualReviewStatusPendingAdmin {
+			continue
+		}
 		// Check upstream payment status before expiring — the user may have
 		// paid just before timeout and the webhook hasn't arrived yet.
 		outcome, _ := s.cancelCore(ctx, o, OrderStatusExpired, "system", "order expired")

@@ -29,6 +29,16 @@ export interface AdminPaymentConfig {
   product_name_suffix: string
   help_image_url: string
   help_text: string
+  manual_payment: {
+    enabled: boolean
+    require_proof: boolean
+    alipay_enabled: boolean
+    wechat_enabled: boolean
+    alipay_qr_code_image_url: string
+    wechat_qr_code_image_url: string
+    help_text: string
+    review_timeout_minutes: number
+  }
 }
 
 /** Fields accepted by PUT /admin/payment/config (all optional via pointer semantics) */
@@ -47,6 +57,14 @@ export interface UpdatePaymentConfigRequest {
   product_name_suffix?: string
   help_image_url?: string
   help_text?: string
+  manual_payment_enabled?: boolean
+  manual_payment_require_proof?: boolean
+  manual_payment_alipay_enabled?: boolean
+  manual_payment_wechat_enabled?: boolean
+  manual_payment_alipay_qr_code_image_url?: string
+  manual_payment_wechat_qr_code_image_url?: string
+  manual_payment_help_text?: string
+  manual_payment_review_timeout_minutes?: number
 }
 
 export const adminPaymentAPI = {
@@ -101,6 +119,11 @@ export const adminPaymentAPI = {
   /** Retry recharge for a failed order */
   retryRecharge(id: number) {
     return apiClient.post(`/admin/payment/orders/${id}/retry`)
+  },
+
+  /** Approve or reject a manual QR payment order */
+  reviewManualPayment(id: number, data: { approved: boolean; note?: string }) {
+    return apiClient.post(`/admin/payment/orders/${id}/manual-review`, data)
   },
 
   /** Process a refund */

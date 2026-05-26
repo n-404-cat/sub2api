@@ -62,6 +62,11 @@ export const paymentAPI = {
     return apiClient.post(`/payment/orders/${id}/cancel`)
   },
 
+  /** Submit proof for a manual QR payment order */
+  submitManualProof(id: number, data: { proof_image_url: string; proof_note?: string }) {
+    return apiClient.post<PaymentOrder>(`/payment/orders/${id}/manual-proof`, data)
+  },
+
   /** Verify order payment status with upstream provider */
   verifyOrder(outTradeNo: string) {
     return apiClient.post<PaymentOrder>('/payment/orders/verify', { out_trade_no: outTradeNo })

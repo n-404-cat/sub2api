@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
@@ -34,8 +35,40 @@ func (s *PaymentConfigService) GetAvailableMethodLimits(ctx context.Context) (*M
 		ml.Currency = currency
 		resp.Methods[ml.PaymentType] = ml
 	}
+	s.applyManualMethodLimits(ctx, resp)
 	resp.GlobalMin, resp.GlobalMax = pcComputeGlobalRange(resp.Methods)
 	return resp, nil
+}
+
+func (s *PaymentConfigService) applyManualMethodLimits(ctx context.Context, resp *MethodLimitsResponse) {
+	if s == nil || resp == nil {
+		return
+	}
+	cfg, err := s.GetPaymentConfig(ctx)
+	if err != nil || cfg == nil || !cfg.ManualPayment.Enabled {
+		return
+	}
+	base := MethodLimits{
+		Currency:   payment.DefaultPaymentCurrency,
+		FeeRate:    cfg.RechargeFeeRate,
+		DailyLimit: cfg.DailyLimit,
+		SingleMin:  cfg.MinAmount,
+		SingleMax:  cfg.MaxAmount,
+	}
+	if cfg.ManualPayment.AlipayEnabled && strings.TrimSpace(cfg.ManualPayment.AlipayQRCodeImageURL) != "" {
+		if _, ok := resp.Methods[payment.TypeAlipay]; !ok {
+			method := base
+			method.PaymentType = payment.TypeAlipay
+			resp.Methods[payment.TypeAlipay] = method
+		}
+	}
+	if cfg.ManualPayment.WechatEnabled && strings.TrimSpace(cfg.ManualPayment.WechatQRCodeImageURL) != "" {
+		if _, ok := resp.Methods[payment.TypeWxpay]; !ok {
+			method := base
+			method.PaymentType = payment.TypeWxpay
+			resp.Methods[payment.TypeWxpay] = method
+		}
+	}
 }
 
 func (s *PaymentConfigService) pcApplyEnabledVisibleMethodInstances(ctx context.Context, typeInstances map[string][]*dbent.PaymentProviderInstance, instances []*dbent.PaymentProviderInstance) map[string][]*dbent.PaymentProviderInstance {

@@ -212,6 +212,14 @@ type SystemSettings struct {
 	PaymentProductNameSuffix         string   `json:"payment_product_name_suffix"`
 	PaymentHelpImageURL              string   `json:"payment_help_image_url"`
 	PaymentHelpText                  string   `json:"payment_help_text"`
+	ManualPaymentEnabled             bool     `json:"manual_payment_enabled"`
+	ManualPaymentRequireProof        bool     `json:"manual_payment_require_proof"`
+	ManualPaymentAlipayEnabled       bool     `json:"manual_payment_alipay_enabled"`
+	ManualPaymentWechatEnabled       bool     `json:"manual_payment_wechat_enabled"`
+	ManualPaymentAlipayQRCodeImageURL string  `json:"manual_payment_alipay_qr_code_image_url"`
+	ManualPaymentWechatQRCodeImageURL string  `json:"manual_payment_wechat_qr_code_image_url"`
+	ManualPaymentHelpText            string   `json:"manual_payment_help_text"`
+	ManualPaymentReviewTimeoutMinutes int     `json:"manual_payment_review_timeout_minutes"`
 
 	// Cancel rate limit
 	PaymentCancelRateLimitEnabled bool   `json:"payment_cancel_rate_limit_enabled"`
