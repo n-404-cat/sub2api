@@ -23,7 +23,7 @@
               <span>{{ t('payment.orders.cancel') }}</span>
             </button>
             <button v-if="row.manual_payment?.enabled" @click="openSupportDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20">
-              <Icon name="chatBubbleLeftRight" size="sm" />
+              <Icon name="chatBubble" size="sm" />
               <span>{{ localText('联系客服', 'Contact support') }}</span>
             </button>
             <button v-if="canRequestRefund(row)" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">

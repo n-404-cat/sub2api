@@ -48,7 +48,7 @@
                   <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('关联订单', 'Linked order') }}</p>
                   <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{{ selectedDetail.conversation.order?.out_trade_no || selectedDetail.conversation.order_id }}</p>
                 </div>
-                <button class="btn btn-secondary" @click="goOrderDetail(selectedDetail.conversation.order_id)">
+                <button class="btn btn-secondary" @click="goOrderDetail()">
                   {{ localText('前往订单管理', 'Go to order management') }}
                 </button>
               </div>
@@ -184,7 +184,7 @@ async function sendReply() {
   }
 }
 
-function goOrderDetail(orderID: number) {
+function goOrderDetail() {
   router.push('/admin/orders')
 }
 
