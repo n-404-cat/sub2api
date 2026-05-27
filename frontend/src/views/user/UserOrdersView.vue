@@ -96,7 +96,7 @@ import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OrderTable from '@/components/payment/OrderTable.vue'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const router = useRouter()
 const appStore = useAppStore()
 
@@ -139,11 +139,6 @@ function handlePageChange(page: number) { pagination.page = page; fetchOrders() 
 function handlePageSizeChange(size: number) { pagination.page_size = size; pagination.page = 1; fetchOrders() }
 
 function handleCancel(orderId: number) { cancelTargetId.value = orderId }
-
-function localText(zh: string, en: string): string {
-  return String(locale.value || '').startsWith('zh') ? zh : en
-}
-
 
 function canCancelOrder(order: PaymentOrder): boolean {
   if (order.status !== 'PENDING') return false
