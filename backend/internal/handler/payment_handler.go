@@ -407,12 +407,17 @@ type UpdateManualPaymentSourceBody struct {
 }
 
 type CreateSupportConversationBody struct {
-	OrderID  int64  `json:"order_id"`
-	Message  string `json:"message"`
+	OrderID *int64 `json:"order_id"`
+	Subject string `json:"subject"`
+	Message string `json:"message"`
 }
 
 type ReplySupportConversationBody struct {
 	Message string `json:"message"`
+}
+
+type BindSupportConversationOrderBody struct {
+	OrderID int64 `json:"order_id"`
 }
 
 // RequestRefund submits a refund request for a completed order.
@@ -519,9 +524,10 @@ func (h *PaymentHandler) CreateSupportConversation(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	detail, err := h.supportService.CreateOrAppendOrderConversation(c.Request.Context(), service.CreateSupportConversationRequest{
+	detail, err := h.supportService.CreateConversation(c.Request.Context(), service.CreateSupportConversationRequest{
 		UserID:  subject.UserID,
 		OrderID: req.OrderID,
+		Subject: req.Subject,
 		Message: req.Message,
 	})
 	if err != nil {
@@ -611,6 +617,39 @@ func (h *PaymentHandler) ReplyMySupportConversation(c *gin.Context) {
 		return
 	}
 	response.Success(c, updated)
+}
+
+// BindSupportConversationOrder binds an order to an existing support conversation.
+// POST /api/v1/payment/support/conversations/:id/bind-order
+func (h *PaymentHandler) BindSupportConversationOrder(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	if h.supportService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready"))
+		return
+	}
+	conversationID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid conversation ID")
+		return
+	}
+	var req BindSupportConversationOrderBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	detail, err := h.supportService.BindOrderToConversation(c.Request.Context(), service.BindSupportConversationOrderRequest{
+		ConversationID: conversationID,
+		UserID:         subject.UserID,
+		OrderID:        req.OrderID,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, detail)
 }
 
 // GetRefundEligibleProviders returns provider instance IDs that allow user refund.

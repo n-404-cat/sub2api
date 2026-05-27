@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -29,6 +31,7 @@ const (
 	SettingProductNameSuffix   = "PRODUCT_NAME_SUFFIX"
 	SettingHelpImageURL        = "PAYMENT_HELP_IMAGE_URL"
 	SettingHelpText            = "PAYMENT_HELP_TEXT"
+	SettingSupportQuickReplies  = "PAYMENT_SUPPORT_QUICK_REPLIES"
 	SettingCancelRateLimitOn   = "CANCEL_RATE_LIMIT_ENABLED"
 	SettingCancelRateLimitMax  = "CANCEL_RATE_LIMIT_MAX"
 	SettingCancelWindowSize    = "CANCEL_RATE_LIMIT_WINDOW"
@@ -60,8 +63,9 @@ type PaymentConfig struct {
 	ProductNameSuffix         string   `json:"product_name_suffix"`
 	HelpImageURL              string   `json:"help_image_url"`
 	HelpText                  string   `json:"help_text"`
-	StripePublishableKey      string   `json:"stripe_publishable_key,omitempty"`
+	StripePublishableKey      string             `json:"stripe_publishable_key,omitempty"`
 	ManualPayment             ManualPaymentConfig `json:"manual_payment"`
+	SupportQuickReplies       []string           `json:"support_quick_replies"`
 
 	// Cancel rate limit settings
 	CancelRateLimitEnabled bool   `json:"cancel_rate_limit_enabled"`
@@ -114,7 +118,8 @@ type UpdatePaymentConfigRequest struct {
 	ManualPaymentAlipayQRImageURL   *string `json:"manual_payment_alipay_qr_code_image_url"`
 	ManualPaymentWechatQRImageURL   *string `json:"manual_payment_wechat_qr_code_image_url"`
 	ManualPaymentHelpText           *string `json:"manual_payment_help_text"`
-	ManualPaymentReviewTimeoutMins  *int    `json:"manual_payment_review_timeout_minutes"`
+	ManualPaymentReviewTimeoutMins  *int      `json:"manual_payment_review_timeout_minutes"`
+	SupportQuickReplies             []string  `json:"support_quick_replies"`
 }
 
 // MethodLimits holds per-payment-type limits.
@@ -216,7 +221,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 		SettingDailyRechargeLimit, SettingOrderTimeoutMinutes, SettingMaxPendingOrders,
 		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
 		SettingProductNamePrefix, SettingProductNameSuffix,
-		SettingHelpImageURL, SettingHelpText,
+		SettingHelpImageURL, SettingHelpText, SettingSupportQuickReplies,
 		SettingCancelRateLimitOn, SettingCancelRateLimitMax,
 		SettingCancelWindowSize, SettingCancelWindowUnit, SettingCancelWindowMode,
 		SettingAlipayForceQRCode,
@@ -237,6 +242,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 	if manualCfg != nil {
 		cfg.ManualPayment = *manualCfg
 	}
+	cfg.SupportQuickReplies = parseStringList(vals[SettingSupportQuickReplies])
 	return cfg, nil
 }
 
@@ -355,12 +361,75 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingManualPaymentHelpText:             derefStr(req.ManualPaymentHelpText),
 		SettingManualPaymentReviewTimeoutMins:    formatPositiveInt(req.ManualPaymentReviewTimeoutMins),
 	}
+	if req.SupportQuickReplies != nil {
+		m[SettingSupportQuickReplies] = joinStringList(req.SupportQuickReplies)
+	}
 	if req.EnabledTypes != nil {
-		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")
-	} else {
-		m[SettingEnabledPaymentTypes] = ""
+		m[SettingEnabledPaymentTypes] = strings.Join(*req.EnabledTypes, ",")
 	}
 	return s.settingRepo.SetMultiple(ctx, m)
+}
+
+func (s *PaymentConfigService) GetSupportQuickReplies(ctx context.Context) ([]string, error) {
+	value, err := s.settingRepo.GetValue(ctx, SettingSupportQuickReplies)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("get support quick replies: %w", err)
+	}
+	return parseStringList(value), nil
+}
+
+func (s *PaymentConfigService) SetSupportQuickReplies(ctx context.Context, replies []string) error {
+	return s.settingRepo.Set(ctx, SettingSupportQuickReplies, joinStringList(replies))
+}
+
+func parseStringList(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}
+	}
+	if strings.HasPrefix(raw, "[") {
+		var list []string
+		if err := json.Unmarshal([]byte(raw), &list); err == nil {
+			out := make([]string, 0, len(list))
+			for _, item := range list {
+				if v := strings.TrimSpace(item); v != "" {
+					out = append(out, v)
+				}
+			}
+			return out
+		}
+	}
+	parts := strings.Split(raw, "\n")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func joinStringList(list []string) string {
+	if len(list) == 0 {
+		return ""
+	}
+	normalized := make([]string, 0, len(list))
+	for _, item := range list {
+		if v := strings.TrimSpace(item); v != "" {
+			normalized = append(normalized, v)
+		}
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return strings.Join(normalized, "\n")
+	}
+	return string(data)
 }
 
 func formatBoolOrEmpty(v *bool) string {

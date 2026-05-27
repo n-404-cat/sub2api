@@ -51,6 +51,7 @@ func RegisterPaymentRoutes(
 				conversations.GET("", paymentHandler.ListMySupportConversations)
 				conversations.POST("", paymentHandler.CreateSupportConversation)
 				conversations.GET("/:id", paymentHandler.GetMySupportConversationDetail)
+				conversations.POST("/:id/bind-order", paymentHandler.BindSupportConversationOrder)
 				conversations.POST("/:id/messages", paymentHandler.ReplyMySupportConversation)
 			}
 		}
@@ -88,6 +89,8 @@ func RegisterPaymentRoutes(
 		// Config
 		adminGroup.GET("/config", adminPaymentHandler.GetConfig)
 		adminGroup.PUT("/config", adminPaymentHandler.UpdateConfig)
+		adminGroup.GET("/support/quick-replies", adminPaymentHandler.GetSupportQuickReplies)
+		adminGroup.PUT("/support/quick-replies", adminPaymentHandler.UpdateSupportQuickReplies)
 
 		// Orders
 		adminOrders := adminGroup.Group("/orders")

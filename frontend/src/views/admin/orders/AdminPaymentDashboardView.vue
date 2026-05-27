@@ -31,6 +31,17 @@
       <template v-else-if="stats">
         <OrderStatsCards :stats="stats" />
         <DailyRevenueChart :data="stats.daily_series || []" :loading="loading" />
+        <div class="card p-4">
+          <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ localText('客服设置', 'Support settings') }}</h3>
+          <div class="space-y-3">
+            <textarea v-model="quickRepliesText" rows="4" class="input" :placeholder="localText('每行一个快捷回复', 'One quick reply per line')"></textarea>
+            <div class="flex justify-end">
+              <button class="btn btn-primary" :disabled="savingQuickReplies" @click="saveQuickReplies">
+                {{ savingQuickReplies ? t('common.processing') : localText('保存快捷回复', 'Save quick replies') }}
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div class="card p-4">
             <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">{{ t('payment.admin.paymentDistribution') }}</h3>
@@ -80,13 +91,19 @@ import Icon from '@/components/icons/Icon.vue'
 import OrderStatsCards from '@/components/admin/payment/OrderStatsCards.vue'
 import DailyRevenueChart from '@/components/admin/payment/DailyRevenueChart.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const appStore = useAppStore()
 
 const DAYS_OPTIONS = [7, 30, 90] as const
 const days = ref<number>(30)
 const loading = ref(false)
 const stats = ref<DashboardStats | null>(null)
+const quickRepliesText = ref('')
+const savingQuickReplies = ref(false)
+
+function localText(zh: string, en: string): string {
+  return String(locale.value || '').startsWith('zh') ? zh : en
+}
 
 function methodColor(type: string): string {
   const c: Record<string, string> = {
@@ -107,12 +124,29 @@ function rankClass(idx: number): string {
 async function loadDashboard() {
   loading.value = true
   try {
-    const res = await adminPaymentAPI.getDashboard(days.value)
-    stats.value = res.data
+    const [dashRes, repliesRes] = await Promise.all([
+      adminPaymentAPI.getDashboard(days.value),
+      adminPaymentAPI.getSupportQuickReplies()
+    ])
+    stats.value = dashRes.data
+    quickRepliesText.value = (repliesRes.data.support_quick_replies || []).join('\n')
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   } finally {
     loading.value = false
+  }
+}
+
+async function saveQuickReplies() {
+  savingQuickReplies.value = true
+  try {
+    await adminPaymentAPI.updateSupportQuickReplies({
+      support_quick_replies: quickRepliesText.value.split('\n').map(s => s.trim()).filter(Boolean),
+    })
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    savingQuickReplies.value = false
   }
 }
 

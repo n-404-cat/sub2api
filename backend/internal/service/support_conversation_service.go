@@ -14,7 +14,7 @@ import (
 type SupportConversation struct {
 	ID                 int64      `json:"id"`
 	UserID             int64      `json:"user_id"`
-	OrderID            int64      `json:"order_id"`
+	OrderID            *int64     `json:"order_id,omitempty"`
 	Subject            string     `json:"subject"`
 	Status             string     `json:"status"`
 	CreatedAt          time.Time  `json:"created_at"`
@@ -49,8 +49,15 @@ type SupportConversationListParams struct {
 
 type CreateSupportConversationRequest struct {
 	UserID  int64
-	OrderID int64
+	OrderID *int64
 	Message string
+	Subject string
+}
+
+type BindSupportConversationOrderRequest struct {
+	ConversationID int64
+	UserID         int64
+	OrderID        int64
 }
 
 type ReplySupportConversationRequest struct {
@@ -69,7 +76,7 @@ func NewSupportConversationService(db *sql.DB, entClient *dbent.Client) *Support
 	return &SupportConversationService{db: db, entClient: entClient}
 }
 
-func (s *SupportConversationService) CreateOrAppendOrderConversation(ctx context.Context, req CreateSupportConversationRequest) (*SupportConversationDetail, error) {
+func (s *SupportConversationService) CreateConversation(ctx context.Context, req CreateSupportConversationRequest) (*SupportConversationDetail, error) {
 	if s == nil || s.db == nil || s.entClient == nil {
 		return nil, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready")
 	}
@@ -77,12 +84,14 @@ func (s *SupportConversationService) CreateOrAppendOrderConversation(ctx context
 	if message == "" {
 		return nil, infraerrors.BadRequest("SUPPORT_MESSAGE_REQUIRED", "message is required")
 	}
-	order, err := s.entClient.PaymentOrder.Get(ctx, req.OrderID)
-	if err != nil {
-		return nil, infraerrors.NotFound("ORDER_NOT_FOUND", "order not found")
-	}
-	if order.UserID != req.UserID {
-		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
+	if req.OrderID != nil {
+		order, err := s.entClient.PaymentOrder.Get(ctx, *req.OrderID)
+		if err != nil {
+			return nil, infraerrors.NotFound("ORDER_NOT_FOUND", "order not found")
+		}
+		if order.UserID != req.UserID {
+			return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -93,29 +102,47 @@ func (s *SupportConversationService) CreateOrAppendOrderConversation(ctx context
 
 	now := time.Now()
 	var conversationID int64
-	query := `SELECT id FROM support_conversations WHERE user_id = $1 AND order_id = $2`
-	if err := tx.QueryRowContext(ctx, query, req.UserID, req.OrderID).Scan(&conversationID); err != nil {
-		if err == sql.ErrNoRows {
-			insert := `
-				INSERT INTO support_conversations (user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at)
-				VALUES ($1, $2, $3, 'open', $4, $4, $4, $4)
-				RETURNING id
-			`
-			subject := fmt.Sprintf("订单咨询 #%d", req.OrderID)
-			if err := tx.QueryRowContext(ctx, insert, req.UserID, req.OrderID, subject, now).Scan(&conversationID); err != nil {
-				return nil, fmt.Errorf("create support conversation: %w", err)
+	subject := strings.TrimSpace(req.Subject)
+	if subject == "" {
+		if req.OrderID != nil {
+			subject = fmt.Sprintf("订单咨询 #%d", *req.OrderID)
+		} else {
+			subject = "客服咨询"
+		}
+	}
+	if req.OrderID != nil {
+		query := `SELECT id FROM support_conversations WHERE user_id = $1 AND order_id = $2`
+		if err := tx.QueryRowContext(ctx, query, req.UserID, *req.OrderID).Scan(&conversationID); err != nil {
+			if err == sql.ErrNoRows {
+				insert := `
+					INSERT INTO support_conversations (user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at)
+					VALUES ($1, $2, $3, 'open', $4, $4, $4, $4)
+					RETURNING id
+				`
+				if err := tx.QueryRowContext(ctx, insert, req.UserID, *req.OrderID, subject, now).Scan(&conversationID); err != nil {
+					return nil, fmt.Errorf("create support conversation: %w", err)
+				}
+			} else {
+				return nil, fmt.Errorf("query support conversation: %w", err)
 			}
 		} else {
-			return nil, fmt.Errorf("query support conversation: %w", err)
+			update := `
+				UPDATE support_conversations
+				SET status = 'open', updated_at = $2, last_message_at = $2, last_user_message_at = $2
+				WHERE id = $1
+			`
+			if _, err := tx.ExecContext(ctx, update, conversationID, now); err != nil {
+				return nil, fmt.Errorf("update support conversation: %w", err)
+			}
 		}
 	} else {
-		update := `
-			UPDATE support_conversations
-			SET status = 'open', updated_at = $2, last_message_at = $2, last_user_message_at = $2
-			WHERE id = $1
+		insert := `
+			INSERT INTO support_conversations (user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at)
+			VALUES ($1, $2, $3, 'open', $4, $4, $4, $4)
+			RETURNING id
 		`
-		if _, err := tx.ExecContext(ctx, update, conversationID, now); err != nil {
-			return nil, fmt.Errorf("update support conversation: %w", err)
+		if err := tx.QueryRowContext(ctx, insert, req.UserID, nil, subject, now).Scan(&conversationID); err != nil {
+			return nil, fmt.Errorf("create support conversation: %w", err)
 		}
 	}
 
@@ -130,6 +157,37 @@ func (s *SupportConversationService) CreateOrAppendOrderConversation(ctx context
 		return nil, fmt.Errorf("commit support conversation tx: %w", err)
 	}
 	return s.GetConversationDetailForUser(ctx, conversationID, req.UserID)
+}
+
+func (s *SupportConversationService) BindOrderToConversation(ctx context.Context, req BindSupportConversationOrderRequest) (*SupportConversationDetail, error) {
+	if s == nil || s.db == nil || s.entClient == nil {
+		return nil, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready")
+	}
+	conversation, err := s.getConversation(ctx, req.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	if conversation.UserID != req.UserID {
+		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this conversation")
+	}
+	order, err := s.entClient.PaymentOrder.Get(ctx, req.OrderID)
+	if err != nil {
+		return nil, infraerrors.NotFound("ORDER_NOT_FOUND", "order not found")
+	}
+	if order.UserID != req.UserID {
+		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE support_conversations
+		SET order_id = $2,
+		    subject = CASE WHEN subject = '' OR subject = '客服咨询' THEN $3 ELSE subject END,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, req.ConversationID, req.OrderID, fmt.Sprintf("订单咨询 #%d", req.OrderID))
+	if err != nil {
+		return nil, fmt.Errorf("bind support order: %w", err)
+	}
+	return s.GetConversationDetailForUser(ctx, req.ConversationID, req.UserID)
 }
 
 func (s *SupportConversationService) ReplyToConversation(ctx context.Context, req ReplySupportConversationRequest) (*SupportConversationDetail, error) {
@@ -275,15 +333,21 @@ func (s *SupportConversationService) getConversation(ctx context.Context, conver
 	`
 	row := s.db.QueryRowContext(ctx, query, conversationID)
 	var conv SupportConversation
-	if err := row.Scan(&conv.ID, &conv.UserID, &conv.OrderID, &conv.Subject, &conv.Status, &conv.CreatedAt, &conv.UpdatedAt, &conv.LastMessageAt, &conv.LastUserMessageAt, &conv.LastAdminMessageAt); err != nil {
+	var orderID sql.NullInt64
+	if err := row.Scan(&conv.ID, &conv.UserID, &orderID, &conv.Subject, &conv.Status, &conv.CreatedAt, &conv.UpdatedAt, &conv.LastMessageAt, &conv.LastUserMessageAt, &conv.LastAdminMessageAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, infraerrors.NotFound("SUPPORT_CONVERSATION_NOT_FOUND", "support conversation not found")
 		}
 		return nil, fmt.Errorf("get support conversation: %w", err)
 	}
+	if orderID.Valid {
+		conv.OrderID = &orderID.Int64
+	}
 	if s.entClient != nil {
-		if order, err := s.entClient.PaymentOrder.Get(ctx, conv.OrderID); err == nil {
-			conv.Order = order
+		if conv.OrderID != nil {
+			if order, err := s.entClient.PaymentOrder.Get(ctx, *conv.OrderID); err == nil {
+				conv.Order = order
+			}
 		}
 	}
 	return &conv, nil
@@ -316,12 +380,18 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 	var items []*SupportConversation
 	for rows.Next() {
 		item := &SupportConversation{}
-		if err := rows.Scan(&item.ID, &item.UserID, &item.OrderID, &item.Subject, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.LastMessageAt, &item.LastUserMessageAt, &item.LastAdminMessageAt); err != nil {
+		var orderID sql.NullInt64
+		if err := rows.Scan(&item.ID, &item.UserID, &orderID, &item.Subject, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.LastMessageAt, &item.LastUserMessageAt, &item.LastAdminMessageAt); err != nil {
 			return nil, fmt.Errorf("scan support conversation: %w", err)
 		}
+		if orderID.Valid {
+			item.OrderID = &orderID.Int64
+		}
 		if s.entClient != nil {
-			if order, err := s.entClient.PaymentOrder.Get(ctx, item.OrderID); err == nil {
-				item.Order = order
+			if item.OrderID != nil {
+				if order, err := s.entClient.PaymentOrder.Get(ctx, *item.OrderID); err == nil {
+					item.Order = order
+				}
 			}
 		}
 		items = append(items, item)

@@ -95,7 +95,7 @@ export const paymentAPI = {
   },
 
   /** Create or append an order consultation conversation */
-  createSupportConversation(data: { order_id: number; message: string }) {
+  createSupportConversation(data: { order_id?: number; subject?: string; message: string }) {
     return apiClient.post<SupportConversationDetail>('/payment/support/conversations', data)
   },
 
@@ -112,6 +112,11 @@ export const paymentAPI = {
   /** Reply in a support conversation */
   replyMySupportConversation(id: number, data: { message: string }) {
     return apiClient.post<SupportConversationDetail>(`/payment/support/conversations/${id}/messages`, data)
+  },
+
+  /** Bind an order to an existing support conversation */
+  bindSupportConversationOrder(id: number, data: { order_id: number }) {
+    return apiClient.post<SupportConversationDetail>(`/payment/support/conversations/${id}/bind-order`, data)
   },
 
   /** Get provider instance IDs that allow user refund */

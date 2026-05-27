@@ -314,6 +314,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/support',
+    name: 'UserSupportConversations',
+    component: () => import('@/views/user/SupportConversationListView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Order Support',
+      titleKey: 'common.contactSupport',
+      requiresPayment: true
+    }
+  },
+  {
     path: '/payment/qrcode',
     name: 'PaymentQRCode',
     component: () => import('@/views/user/PaymentQRCodeView.vue'),

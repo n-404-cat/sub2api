@@ -70,6 +70,7 @@ export interface PaymentConfig {
   help_text: string
   stripe_publishable_key: string
   manual_payment: ManualPaymentConfig
+  support_quick_replies?: string[]
 }
 
 export interface MethodLimit {
@@ -247,7 +248,7 @@ export interface CreateOrderResult {
 export interface SupportConversation {
   id: number
   user_id: number
-  order_id: number
+  order_id?: number | null
   subject: string
   status: 'open' | 'closed' | string
   created_at: string

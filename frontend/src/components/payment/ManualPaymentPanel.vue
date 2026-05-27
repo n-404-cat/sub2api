@@ -159,7 +159,7 @@
 
     <div class="flex justify-end">
       <div class="flex flex-wrap justify-end gap-3">
-        <button type="button" class="btn btn-secondary" @click="showSupportDialog = true">
+        <button type="button" class="btn btn-secondary" @click="goSupport">
           {{ localText('联系客服（订单咨询）', 'Contact support') }}
         </button>
         <button type="button" class="btn btn-secondary" @click="emit('back')">
@@ -184,13 +184,6 @@
       </Transition>
     </Teleport>
 
-    <OrderSupportDialog
-      :show="showSupportDialog"
-      :order="order"
-      :submitting="supportSubmitting"
-      @confirm="startSupportConversation"
-      @cancel="showSupportDialog = false"
-    />
   </div>
 </template>
 
@@ -203,7 +196,6 @@ import { formatPaymentAmount, normalizePaymentCurrency } from '@/components/paym
 import type { PaymentOrder } from '@/types/payment'
 import { useAppStore } from '@/stores'
 import { extractI18nErrorMessage } from '@/utils/apiError'
-import OrderSupportDialog from '@/components/payment/OrderSupportDialog.vue'
 
 const props = withDefaults(defineProps<{
   order: PaymentOrder
@@ -233,8 +225,6 @@ const proofNote = ref('')
 const submitting = ref(false)
 const switching = ref(false)
 const previewImage = ref('')
-const showSupportDialog = ref(false)
-const supportSubmitting = ref(false)
 
 watch(
   () => props.order.manual_payment?.proof_note,
@@ -368,19 +358,7 @@ async function switchSource(source: 'manual_alipay' | 'manual_wxpay') {
   }
 }
 
-async function startSupportConversation(payload: { message: string }) {
-  supportSubmitting.value = true
-  try {
-    const res = await paymentAPI.createSupportConversation({
-      order_id: props.order.id,
-      message: payload.message,
-    })
-    showSupportDialog.value = false
-    window.location.href = `/support/${res.data.conversation.id}`
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
-  } finally {
-    supportSubmitting.value = false
-  }
+function goSupport() {
+  window.location.href = '/support'
 }
 </script>

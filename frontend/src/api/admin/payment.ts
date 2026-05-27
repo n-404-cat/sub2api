@@ -29,6 +29,7 @@ export interface AdminPaymentConfig {
   product_name_suffix: string
   help_image_url: string
   help_text: string
+  support_quick_replies?: string[]
   manual_payment: {
     enabled: boolean
     require_proof: boolean
@@ -67,6 +68,10 @@ export interface UpdatePaymentConfigRequest {
   manual_payment_review_timeout_minutes?: number
 }
 
+export interface SupportQuickRepliesResponse {
+  support_quick_replies: string[]
+}
+
 export const adminPaymentAPI = {
   // ==================== Config ====================
 
@@ -78,6 +83,14 @@ export const adminPaymentAPI = {
   /** Update payment configuration */
   updateConfig(data: UpdatePaymentConfigRequest) {
     return apiClient.put('/admin/payment/config', data)
+  },
+
+  getSupportQuickReplies() {
+    return apiClient.get<SupportQuickRepliesResponse>('/admin/payment/support/quick-replies')
+  },
+
+  updateSupportQuickReplies(data: { support_quick_replies: string[] }) {
+    return apiClient.put('/admin/payment/support/quick-replies', data)
   },
 
   // ==================== Dashboard ====================

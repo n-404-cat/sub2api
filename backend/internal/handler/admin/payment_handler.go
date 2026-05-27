@@ -474,3 +474,29 @@ func (h *PaymentHandler) UpdateConfig(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"message": "updated"})
 }
+
+type supportQuickRepliesBody struct {
+	SupportQuickReplies []string `json:"support_quick_replies"`
+}
+
+func (h *PaymentHandler) GetSupportQuickReplies(c *gin.Context) {
+	replies, err := h.configService.GetSupportQuickReplies(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"support_quick_replies": replies})
+}
+
+func (h *PaymentHandler) UpdateSupportQuickReplies(c *gin.Context) {
+	var req supportQuickRepliesBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.configService.SetSupportQuickReplies(c.Request.Context(), req.SupportQuickReplies); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "updated"})
+}

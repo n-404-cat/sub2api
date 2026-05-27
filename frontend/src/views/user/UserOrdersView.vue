@@ -22,10 +22,6 @@
               <Icon name="x" size="sm" />
               <span>{{ t('payment.orders.cancel') }}</span>
             </button>
-            <button v-if="row.manual_payment?.enabled" @click="openSupportDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20">
-              <Icon name="chatBubble" size="sm" />
-              <span>{{ localText('联系客服', 'Contact support') }}</span>
-            </button>
             <button v-if="canRequestRefund(row)" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
               <Icon name="dollar" size="sm" />
               <span>{{ t('payment.orders.requestRefund') }}</span>
@@ -82,13 +78,6 @@
       </template>
     </BaseDialog>
 
-    <OrderSupportDialog
-      :show="!!supportTarget"
-      :order="supportTarget"
-      :submitting="actionLoading"
-      @confirm="confirmSupportConversation"
-      @cancel="supportTarget = null"
-    />
   </AppLayout>
 </template>
 
@@ -106,7 +95,6 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OrderTable from '@/components/payment/OrderTable.vue'
-import OrderSupportDialog from '@/components/payment/OrderSupportDialog.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -119,7 +107,6 @@ const refundEligibleProviders = ref<Set<string>>(new Set())
 const currentFilter = ref('')
 const cancelTargetId = ref<number | null>(null)
 const refundTarget = ref<PaymentOrder | null>(null)
-const supportTarget = ref<PaymentOrder | null>(null)
 const refundReason = ref('')
 const pagination = reactive({ page: 1, page_size: 20, total: 0 })
 
@@ -157,26 +144,6 @@ function localText(zh: string, en: string): string {
   return String(locale.value || '').startsWith('zh') ? zh : en
 }
 
-function openSupportDialog(order: PaymentOrder) {
-  supportTarget.value = order
-}
-
-async function confirmSupportConversation(payload: { message: string }) {
-  if (!supportTarget.value) return
-  actionLoading.value = true
-  try {
-    const res = await paymentAPI.createSupportConversation({
-      order_id: supportTarget.value.id,
-      message: payload.message,
-    })
-    supportTarget.value = null
-    await router.push(`/support/${res.data.conversation.id}`)
-  } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
-  } finally {
-    actionLoading.value = false
-  }
-}
 
 function canCancelOrder(order: PaymentOrder): boolean {
   if (order.status !== 'PENDING') return false

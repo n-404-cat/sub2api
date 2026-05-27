@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS support_conversations (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    order_id BIGINT NOT NULL,
+    order_id BIGINT NULL,
     subject VARCHAR(200) NOT NULL DEFAULT '',
     status VARCHAR(20) NOT NULL DEFAULT 'open',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
