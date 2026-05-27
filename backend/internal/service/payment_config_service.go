@@ -365,7 +365,7 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		m[SettingSupportQuickReplies] = joinStringList(req.SupportQuickReplies)
 	}
 	if req.EnabledTypes != nil {
-		m[SettingEnabledPaymentTypes] = strings.Join(*req.EnabledTypes, ",")
+		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")
 	}
 	return s.settingRepo.SetMultiple(ctx, m)
 }
