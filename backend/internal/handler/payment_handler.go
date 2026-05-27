@@ -566,7 +566,7 @@ func (h *PaymentHandler) GetMySupportConversationDetail(c *gin.Context) {
 		response.BadRequest(c, "Invalid conversation ID")
 		return
 	}
-	_, err = h.supportService.GetConversationDetailForUser(c.Request.Context(), conversationID, subject.UserID)
+	detail, err := h.supportService.GetConversationDetailForUser(c.Request.Context(), conversationID, subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -595,7 +595,7 @@ func (h *PaymentHandler) ReplyMySupportConversation(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	detail, err := h.supportService.GetConversationDetailForUser(c.Request.Context(), conversationID, subject.UserID)
+	_, err = h.supportService.GetConversationDetailForUser(c.Request.Context(), conversationID, subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
