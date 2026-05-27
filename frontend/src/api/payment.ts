@@ -12,7 +12,9 @@ import type {
   CheckoutInfoResponse,
   CreateOrderRequest,
   CreateOrderResult,
-  PaymentOrder
+  PaymentOrder,
+  SupportConversation,
+  SupportConversationDetail
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
 
@@ -90,6 +92,26 @@ export const paymentAPI = {
   /** Request a refund for a completed order */
   requestRefund(id: number, data: { reason: string }) {
     return apiClient.post(`/payment/orders/${id}/refund-request`, data)
+  },
+
+  /** Create or append an order consultation conversation */
+  createSupportConversation(data: { order_id: number; message: string }) {
+    return apiClient.post<SupportConversationDetail>('/payment/support/conversations', data)
+  },
+
+  /** List current user's support conversations */
+  getMySupportConversations() {
+    return apiClient.get<SupportConversation[]>('/payment/support/conversations')
+  },
+
+  /** Get support conversation detail */
+  getMySupportConversation(id: number) {
+    return apiClient.get<SupportConversationDetail>(`/payment/support/conversations/${id}`)
+  },
+
+  /** Reply in a support conversation */
+  replyMySupportConversation(id: number, data: { message: string }) {
+    return apiClient.post<SupportConversationDetail>(`/payment/support/conversations/${id}/messages`, data)
   },
 
   /** Get provider instance IDs that allow user refund */

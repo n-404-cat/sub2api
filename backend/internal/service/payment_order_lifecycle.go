@@ -107,6 +107,9 @@ func (s *PaymentService) CancelOrder(ctx context.Context, orderID, userID int64)
 	if o.Status != OrderStatusPending {
 		return "", infraerrors.BadRequest("INVALID_STATUS", "order cannot be cancelled in current status")
 	}
+	if meta := extractManualPaymentOrderMeta(o); isManualPaymentSource(meta.PaymentSource) && meta.ReviewStatus == ManualReviewStatusPendingAdmin {
+		return "", infraerrors.BadRequest("INVALID_STATUS", "manual payment order under admin review cannot be cancelled")
+	}
 	return s.cancelCore(ctx, o, OrderStatusCancelled, fmt.Sprintf("user:%d", userID), "user cancelled order")
 }
 

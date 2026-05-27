@@ -244,6 +244,34 @@ export interface CreateOrderResult {
   jsapi_payload?: WechatJSAPIPayload
 }
 
+export interface SupportConversation {
+  id: number
+  user_id: number
+  order_id: number
+  subject: string
+  status: 'open' | 'closed' | string
+  created_at: string
+  updated_at: string
+  last_message_at: string
+  last_user_message_at?: string
+  last_admin_message_at?: string
+  order?: PaymentOrder
+}
+
+export interface SupportMessage {
+  id: number
+  conversation_id: number
+  sender_type: 'user' | 'admin' | string
+  sender_user_id?: number | null
+  message: string
+  created_at: string
+}
+
+export interface SupportConversationDetail {
+  conversation: SupportConversation
+  messages: SupportMessage[]
+}
+
 export interface DashboardStats {
   today_amount: number
   total_amount: number

@@ -302,6 +302,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/support/:id',
+    name: 'UserSupportConversation',
+    component: () => import('@/views/user/SupportConversationView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Order Support',
+      titleKey: 'common.contactSupport',
+      requiresPayment: true
+    }
+  },
+  {
     path: '/payment/qrcode',
     name: 'PaymentQRCode',
     component: () => import('@/views/user/PaymentQRCodeView.vue'),
@@ -649,6 +661,18 @@ const routes: RouteRecordRaw[] = [
       requiresAdmin: true,
       title: 'Subscription Plans',
       titleKey: 'nav.paymentPlans',
+      requiresPayment: true
+    }
+  },
+  {
+    path: '/admin/orders/support',
+    name: 'AdminOrderSupport',
+    component: () => import('@/views/admin/orders/AdminOrderSupportView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Order Support',
+      titleKey: 'common.contactSupport',
       requiresPayment: true
     }
   },

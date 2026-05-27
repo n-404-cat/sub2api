@@ -398,6 +398,8 @@ function formatMoneyWithUnit(amount?: number, orderType?: string): string {
 function formatAuditAction(action: string): string {
   const map: Record<string, string> = {
     ORDER_CREATED: localText('创建订单', 'Order created'),
+    ORDER_EXPIRED: localText('订单已过期', 'Order expired'),
+    ORDER_CANCELLED: localText('订单已取消', 'Order cancelled'),
     MANUAL_PAYMENT_PROOF_SUBMITTED: localText('用户提交付款凭证', 'Payment proof submitted'),
     MANUAL_PAYMENT_SOURCE_CHANGED: localText('切换人工支付方式', 'Manual payment source changed'),
     MANUAL_PAYMENT_APPROVED: localText('人工审核通过', 'Manual payment approved'),
@@ -405,6 +407,8 @@ function formatAuditAction(action: string): string {
     MANUAL_PAYMENT_APPROVAL_FULFILLMENT_SUCCEEDED: localText('审核通过后已完成入账', 'Fulfillment succeeded after approval'),
     MANUAL_PAYMENT_APPROVAL_FULFILLMENT_FAILED: localText('审核通过后入账失败', 'Fulfillment failed after approval'),
     MANUAL_REFUND_MARKED: localText('已登记线下人工退款', 'Offline manual refund recorded'),
+    RECHARGE_SUCCESS: localText('充值成功', 'Recharge successful'),
+    AFFILIATE_REBATE_SKIPPED: localText('返利跳过', 'Affiliate rebate skipped'),
     REFUND_REQUESTED: localText('用户申请退款', 'Refund requested'),
     REFUND_SUCCESS: localText('退款成功', 'Refund successful'),
     REFUND_FAILED: localText('退款失败', 'Refund failed'),
@@ -426,11 +430,24 @@ function formatAuditDetail(log: AuditLog): string {
     if (data.proofNote) lines.push(`${localText('用户备注', 'User note')}: ${String(data.proofNote)}`)
     if (data.reviewNote) lines.push(`${localText('审核备注', 'Review note')}: ${String(data.reviewNote)}`)
     if (data.reason) lines.push(`${localText('原因', 'Reason')}: ${String(data.reason)}`)
+    if (data.detail) {
+      const detail = String(data.detail)
+      lines.push(`${localText('详情', 'Detail')}: ${detail === 'order expired' ? localText('订单超时未支付，系统已自动关闭', 'The order timed out and was closed automatically') : detail}`)
+    }
     if (typeof data.refundAmount === 'number') lines.push(`${localText('退款金额', 'Refund amount')}: ¥${Number(data.refundAmount).toFixed(2)}`)
     if (data.mode) lines.push(`${localText('退款方式', 'Refund mode')}: ${String(data.mode) === 'offline_manual_refund' ? localText('线下人工退款', 'Offline manual refund') : String(data.mode)}`)
     if (data.result) lines.push(`${localText('结果', 'Result')}: ${String(data.result)}`)
+    if (String(log.action) === 'AFFILIATE_REBATE_SKIPPED' && lines.length === 0) {
+      return localText('原因：未绑定邀请人，或返利金额小于等于 0', 'Reason: no inviter bound or rebate amount <= 0')
+    }
     return lines.length > 0 ? lines.join('\n') : log.detail
   } catch {
+    if (log.action === 'AFFILIATE_REBATE_SKIPPED' && log.detail.includes('no inviter bound or rebate amount <= 0')) {
+      return localText('原因：未绑定邀请人，或返利金额小于等于 0', 'Reason: no inviter bound or rebate amount <= 0')
+    }
+    if (log.action === 'ORDER_EXPIRED' && log.detail.includes('order expired')) {
+      return localText('详情：订单超时未支付，系统已自动关闭', 'Detail: the order timed out and was closed automatically')
+    }
     return log.detail
   }
 }

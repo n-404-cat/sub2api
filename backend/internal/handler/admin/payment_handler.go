@@ -1,19 +1,26 @@
 package admin
 
 import (
+	"database/sql"
 	"strconv"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
+func responseErrorSupportNotReady() error {
+	return infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready")
+}
+
 // PaymentHandler handles admin payment management.
 type PaymentHandler struct {
 	paymentService *service.PaymentService
 	configService  *service.PaymentConfigService
+	supportService  *service.SupportConversationService
 }
 
 // NewPaymentHandler creates a new admin PaymentHandler.
@@ -22,6 +29,14 @@ func NewPaymentHandler(paymentService *service.PaymentService, configService *se
 		paymentService: paymentService,
 		configService:  configService,
 	}
+}
+
+// SetSupportService wires the order consultation support service without changing constructor signatures.
+func (h *PaymentHandler) SetSupportService(db *sql.DB, entClient *dbent.Client) {
+	if h == nil {
+		return
+	}
+	h.supportService = service.NewSupportConversationService(db, entClient)
 }
 
 // --- Dashboard ---
@@ -154,6 +169,10 @@ type AdminReviewManualPaymentRequest struct {
 	Note     string `json:"note"`
 }
 
+type AdminReplySupportConversationBody struct {
+	Message string `json:"message"`
+}
+
 // ProcessRefund processes a refund for an order (admin).
 // POST /api/v1/admin/payment/orders/:id/refund
 func (h *PaymentHandler) ProcessRefund(c *gin.Context) {
@@ -210,6 +229,82 @@ func (h *PaymentHandler) ReviewManualPayment(c *gin.Context) {
 		return
 	}
 	response.Success(c, sanitizeAdminPaymentOrderForResponse(order))
+}
+
+// ListSupportConversations lists support conversations for admin.
+// GET /api/v1/admin/payment/support/conversations
+func (h *PaymentHandler) ListSupportConversations(c *gin.Context) {
+	if h.supportService == nil {
+		response.ErrorFrom(c, responseErrorSupportNotReady())
+		return
+	}
+	page, pageSize := response.ParsePagination(c)
+	var userID int64
+	if uid := c.Query("user_id"); uid != "" {
+		if v, err := strconv.ParseInt(uid, 10, 64); err == nil {
+			userID = v
+		}
+	}
+	items, total, err := h.supportService.ListAdminConversations(c.Request.Context(), service.SupportConversationListParams{
+		Page:     page,
+		PageSize: pageSize,
+		Status:   c.Query("status"),
+		UserID:   userID,
+		Keyword:  c.Query("keyword"),
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, items, total, page, pageSize)
+}
+
+// GetSupportConversationDetail returns a support conversation with messages.
+// GET /api/v1/admin/payment/support/conversations/:id
+func (h *PaymentHandler) GetSupportConversationDetail(c *gin.Context) {
+	if h.supportService == nil {
+		response.ErrorFrom(c, responseErrorSupportNotReady())
+		return
+	}
+	conversationID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	detail, err := h.supportService.GetConversationDetailForAdmin(c.Request.Context(), conversationID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, detail)
+}
+
+// ReplySupportConversation appends an admin reply to a support conversation.
+// POST /api/v1/admin/payment/support/conversations/:id/messages
+func (h *PaymentHandler) ReplySupportConversation(c *gin.Context) {
+	if h.supportService == nil {
+		response.ErrorFrom(c, responseErrorSupportNotReady())
+		return
+	}
+	conversationID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req AdminReplySupportConversationBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	detail, err := h.supportService.ReplyToConversation(c.Request.Context(), service.ReplySupportConversationRequest{
+		ConversationID: conversationID,
+		SenderType:     "admin",
+		SenderUserID:   nil,
+		Message:        req.Message,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, detail)
 }
 
 // --- Subscription Plans ---

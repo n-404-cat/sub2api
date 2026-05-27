@@ -29,6 +29,7 @@ import channelsAPI from './channels'
 import channelMonitorAPI from './channelMonitor'
 import channelMonitorTemplateAPI from './channelMonitorTemplate'
 import adminPaymentAPI from './payment'
+import adminSupportAPI from './support'
 import affiliatesAPI from './affiliates'
 import riskControlAPI from './riskControl'
 
@@ -62,6 +63,7 @@ export const adminAPI = {
   channelMonitor: channelMonitorAPI,
   channelMonitorTemplate: channelMonitorTemplateAPI,
   payment: adminPaymentAPI,
+  support: adminSupportAPI,
   affiliates: affiliatesAPI,
   riskControl: riskControlAPI
 }
@@ -93,6 +95,7 @@ export {
   channelMonitorAPI,
   channelMonitorTemplateAPI,
   adminPaymentAPI,
+  adminSupportAPI,
   affiliatesAPI,
   riskControlAPI
 }

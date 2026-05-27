@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ type PaymentHandler struct {
 	channelService *service.ChannelService
 	paymentService *service.PaymentService
 	configService  *service.PaymentConfigService
+	supportService *service.SupportConversationService
 }
 
 // NewPaymentHandler creates a new PaymentHandler.
@@ -31,6 +33,14 @@ func NewPaymentHandler(paymentService *service.PaymentService, configService *se
 		paymentService: paymentService,
 		configService:  configService,
 	}
+}
+
+// SetSupportService wires optional support conversation service without changing constructor signatures.
+func (h *PaymentHandler) SetSupportService(db *sql.DB, entClient *dbent.Client) {
+	if h == nil {
+		return
+	}
+	h.supportService = service.NewSupportConversationService(db, entClient)
 }
 
 // GetPaymentConfig returns the payment system configuration.
@@ -396,6 +406,15 @@ type UpdateManualPaymentSourceBody struct {
 	PaymentSource string `json:"payment_source"`
 }
 
+type CreateSupportConversationBody struct {
+	OrderID  int64  `json:"order_id"`
+	Message  string `json:"message"`
+}
+
+type ReplySupportConversationBody struct {
+	Message string `json:"message"`
+}
+
 // RequestRefund submits a refund request for a completed order.
 // POST /api/v1/payment/orders/:id/refund-request
 func (h *PaymentHandler) RequestRefund(c *gin.Context) {
@@ -482,6 +501,116 @@ func (h *PaymentHandler) UpdateManualPaymentSource(c *gin.Context) {
 		return
 	}
 	response.Success(c, sanitizePaymentOrderForResponse(order))
+}
+
+// CreateSupportConversation creates or appends an order consultation conversation for the current user.
+// POST /api/v1/payment/support/conversations
+func (h *PaymentHandler) CreateSupportConversation(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	if h.supportService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready"))
+		return
+	}
+	var req CreateSupportConversationBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	detail, err := h.supportService.CreateOrAppendOrderConversation(c.Request.Context(), service.CreateSupportConversationRequest{
+		UserID:  subject.UserID,
+		OrderID: req.OrderID,
+		Message: req.Message,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, detail)
+}
+
+// ListMySupportConversations lists current user's order consultation conversations.
+// GET /api/v1/payment/support/conversations
+func (h *PaymentHandler) ListMySupportConversations(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	if h.supportService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready"))
+		return
+	}
+	items, err := h.supportService.ListUserConversations(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, items)
+}
+
+// GetMySupportConversationDetail returns a single support conversation with messages.
+// GET /api/v1/payment/support/conversations/:id
+func (h *PaymentHandler) GetMySupportConversationDetail(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	if h.supportService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready"))
+		return
+	}
+	conversationID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid conversation ID")
+		return
+	}
+	detail, err := h.supportService.GetConversationDetailForUser(c.Request.Context(), conversationID, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, detail)
+}
+
+// ReplyMySupportConversation appends a user message to an existing support conversation.
+// POST /api/v1/payment/support/conversations/:id/messages
+func (h *PaymentHandler) ReplyMySupportConversation(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	if h.supportService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready"))
+		return
+	}
+	conversationID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid conversation ID")
+		return
+	}
+	var req ReplySupportConversationBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	detail, err := h.supportService.GetConversationDetailForUser(c.Request.Context(), conversationID, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	updated, err := h.supportService.ReplyToConversation(c.Request.Context(), service.ReplySupportConversationRequest{
+		ConversationID: conversationID,
+		SenderType:     "user",
+		SenderUserID:   &subject.UserID,
+		Message:        req.Message,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, updated)
 }
 
 // GetRefundEligibleProviders returns provider instance IDs that allow user refund.
