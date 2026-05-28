@@ -37,7 +37,12 @@
                   <p class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ item.out_trade_no }}</p>
                   <span class="text-xs text-gray-400">#{{ item.id }}</span>
                 </div>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ item.payment_type }}</p>
+                <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{{ localText('金额', 'Amount') }}: {{ formatAmount(item) }}</span>
+                  <span>{{ localText('状态', 'Status') }}: {{ item.status }}</span>
+                  <span>{{ localText('方式', 'Method') }}: {{ item.payment_type }}</span>
+                  <span>{{ localText('时间', 'Created') }}: {{ formatShortTime(item.created_at) }}</span>
+                </div>
               </button>
             </div>
           </div>
@@ -64,6 +69,9 @@
                 </div>
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {{ conv.order?.out_trade_no ? `${localText('订单号', 'Order No')}: ${conv.order.out_trade_no}` : localText('未关联订单', 'No order linked') }}
+                </p>
+                <p v-if="conv.order" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  {{ formatAmount(conv.order) }} · {{ conv.order.status }} · {{ conv.order.payment_type }}
                 </p>
               </div>
             </div>
@@ -100,6 +108,15 @@ function localText(zh: string, en: string): string {
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleString()
+}
+
+function formatShortTime(value: string): string {
+  return new Date(value).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatAmount(order: PaymentOrder): string {
+  const prefix = order.order_type === 'balance' ? '$' : '¥'
+  return `${prefix}${order.amount.toFixed(2)}`
 }
 
 async function loadData() {

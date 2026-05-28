@@ -9,18 +9,39 @@
               {{ detail?.conversation.subject || localText('客服咨询', 'Support') }}
             </h2>
             <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              {{ detail?.conversation.order?.out_trade_no ? `${localText('已关联订单', 'Linked order')}: ${detail.conversation.order.out_trade_no}` : localText('当前未关联订单', 'No order linked yet') }}
+              {{ linkedOrderSummary }}
             </p>
           </div>
-          <div class="flex gap-2">
-            <button class="btn btn-secondary" @click="showOrderPicker = true">{{ localText('选择订单', 'Choose order') }}</button>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400">{{ autoRefreshEnabled ? localText('自动刷新中', 'Auto refresh on') : localText('自动刷新关闭', 'Auto refresh off') }}</span>
             <button class="btn btn-secondary" @click="router.push('/support')">{{ localText('返回列表', 'Back') }}</button>
           </div>
         </div>
       </div>
 
+      <div v-if="detail?.conversation.order" class="card p-4">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-800">
+            <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('订单号', 'Order No') }}</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ detail.conversation.order.out_trade_no }}</p>
+          </div>
+          <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-800">
+            <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('金额', 'Amount') }}</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatAmount(detail.conversation.order) }}</p>
+          </div>
+          <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-800">
+            <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('支付方式', 'Payment') }}</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ detail.conversation.order.payment_type }}</p>
+          </div>
+          <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-800">
+            <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('订单状态', 'Status') }}</p>
+            <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ detail.conversation.order.status }}</p>
+          </div>
+        </div>
+      </div>
+
       <div class="card p-5">
-        <div class="space-y-3">
+        <div ref="messagesContainer" class="max-h-[54vh] space-y-3 overflow-y-auto pr-1">
           <div
             v-for="message in detail?.messages || []"
             :key="message.id"
@@ -42,21 +63,85 @@
       </div>
 
       <div class="card p-5 space-y-3">
-        <div class="flex flex-wrap gap-2">
-          <button v-for="emoji in emojis" :key="emoji" class="rounded-full border border-gray-200 px-3 py-1 text-sm hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800" @click="appendEmoji(emoji)">
+        <div class="flex items-center gap-3 border-b border-gray-100 pb-3 dark:border-dark-700">
+          <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('emoji')">
+            <Icon name="chatBubble" size="sm" />
+            {{ localText('表情', 'Emoji') }}
+          </button>
+          <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('order')">
+            <Icon name="link" size="sm" />
+            {{ localText('选择订单', 'Order') }}
+          </button>
+          <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('quickReply')">
+            <Icon name="lightbulb" size="sm" />
+            {{ localText('快捷回复', 'Quick reply') }}
+          </button>
+        </div>
+
+        <div v-if="activeToolPanel === 'emoji'" class="flex flex-wrap gap-2">
+          <button
+            v-for="emoji in emojis"
+            :key="emoji"
+            class="rounded-full border border-gray-200 px-3 py-2 text-lg hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800"
+            @click="appendEmoji(emoji)"
+          >
             {{ emoji }}
           </button>
         </div>
 
-        <div v-if="quickReplies.length" class="flex flex-wrap gap-2">
-          <button v-for="reply in quickReplies" :key="reply" class="rounded-full bg-primary-50 px-3 py-1 text-sm text-primary-700 hover:bg-primary-100 dark:bg-primary-900/20 dark:text-primary-200" @click="insertQuickReply(reply)">
+        <div v-else-if="activeToolPanel === 'quickReply'" class="flex flex-wrap gap-2">
+          <button
+            v-for="reply in quickReplies"
+            :key="reply"
+            class="rounded-full bg-primary-50 px-3 py-2 text-sm text-primary-700 hover:bg-primary-100 dark:bg-primary-900/20 dark:text-primary-200"
+            @click="insertQuickReply(reply)"
+          >
             {{ reply }}
           </button>
+          <p v-if="quickReplies.length === 0" class="text-sm text-gray-400">{{ localText('后台还没有配置快捷回复', 'No quick replies configured yet') }}</p>
         </div>
 
-        <textarea v-model="replyMessage" rows="4" class="input" :placeholder="localText('输入消息', 'Type a message')"></textarea>
+        <div v-else-if="activeToolPanel === 'order'" class="space-y-2">
+          <div
+            v-for="order in orders"
+            :key="order.id"
+            :class="[
+              'cursor-pointer rounded-2xl border p-4 transition-colors',
+              pendingOrderId === order.id
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-gray-200 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800'
+            ]"
+            @click="pendingOrderId = order.id"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ order.out_trade_no }}</p>
+              <span class="text-xs text-gray-400">#{{ order.id }}</span>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span>{{ localText('金额', 'Amount') }}: {{ formatAmount(order) }}</span>
+              <span>{{ localText('状态', 'Status') }}: {{ order.status }}</span>
+              <span>{{ localText('方式', 'Method') }}: {{ order.payment_type }}</span>
+              <span>{{ localText('时间', 'Created') }}: {{ formatShortTime(order.created_at) }}</span>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button class="btn btn-primary" :disabled="!pendingOrderId || bindingOrder" @click="confirmBindOrder">
+              {{ bindingOrder ? t('common.processing') : localText('确认关联订单', 'Bind order') }}
+            </button>
+          </div>
+        </div>
+
+        <textarea
+          v-model="replyMessage"
+          rows="4"
+          class="input"
+          :placeholder="localText('输入消息', 'Type a message')"
+        ></textarea>
         <div class="flex items-center justify-between gap-3">
-          <span class="text-xs text-gray-400">{{ localText('表情和快捷回复可直接插入', 'Emoji and quick replies insert text directly') }}</span>
+          <button class="btn btn-secondary btn-sm" @click="loadDetail(true)">
+            <Icon name="refresh" size="sm" />
+            {{ localText('立即刷新', 'Refresh now') }}
+          </button>
           <button class="btn btn-primary" :disabled="sending || !replyMessage.trim()" @click="sendReply">
             {{ sending ? t('common.processing') : localText('发送消息', 'Send message') }}
           </button>
@@ -64,34 +149,19 @@
       </div>
     </div>
   </AppLayout>
-
-  <BaseDialog :show="showOrderPicker" :title="localText('选择订单', 'Choose order')" width="normal" @close="showOrderPicker = false">
-    <div class="space-y-2">
-      <button
-        v-for="order in orders"
-        :key="order.id"
-        class="w-full rounded-xl border px-4 py-3 text-left hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800"
-        @click="bindOrder(order.id)"
-      >
-        <div class="flex justify-between">
-          <span class="font-medium text-gray-900 dark:text-white">{{ order.out_trade_no }}</span>
-          <span class="text-xs text-gray-400">#{{ order.id }}</span>
-        </div>
-      </button>
-    </div>
-  </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { paymentAPI } from '@/api/payment'
 import { useAppStore } from '@/stores'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import type { PaymentOrder, SupportConversationDetail } from '@/types/payment'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -101,18 +171,44 @@ const appStore = useAppStore()
 const detail = ref<SupportConversationDetail | null>(null)
 const replyMessage = ref('')
 const sending = ref(false)
-const showOrderPicker = ref(false)
+const bindingOrder = ref(false)
 const orders = ref<PaymentOrder[]>([])
-const emojis = ['😀', '😍', '🙏', '👍', '🎉', '💬', '📦', '✅']
-
+const pendingOrderId = ref<number | null>(null)
 const quickReplies = ref<string[]>([])
+const messagesContainer = ref<HTMLElement | null>(null)
+const activeToolPanel = ref<'emoji' | 'order' | 'quickReply' | null>(null)
+const emojis = ['😀', '😁', '😂', '😅', '😍', '🙏', '👍', '🎉', '📦', '✅', '⌛', '💬']
 
 function localText(zh: string, en: string): string {
   return String(locale.value || '').startsWith('zh') ? zh : en
 }
 
+const linkedOrderSummary = computed(() => {
+  const order = detail.value?.conversation.order
+  if (!order) return localText('当前未关联订单，可在下方工具栏里选择订单。', 'No order linked. You can bind one from the toolbar below.')
+  return `${localText('已关联订单', 'Linked order')}: ${order.out_trade_no} · ${formatAmount(order)} · ${order.status}`
+})
+
+const autoRefresh = useAutoRefresh({
+  storageKey: 'support-conversation-auto-refresh',
+  defaultInterval: 5,
+  onRefresh: () => loadDetail(false),
+  shouldPause: () => sending.value || bindingOrder.value,
+})
+
+const autoRefreshEnabled = computed(() => autoRefresh.enabled.value)
+
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString()
+}
+
+function formatShortTime(value: string): string {
+  return new Date(value).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatAmount(order: PaymentOrder): string {
+  const prefix = order.order_type === 'balance' ? '$' : '¥'
+  return `${prefix}${order.amount.toFixed(2)}`
 }
 
 function appendEmoji(emoji: string) {
@@ -123,12 +219,24 @@ function insertQuickReply(text: string) {
   replyMessage.value = replyMessage.value ? `${replyMessage.value}\n${text}` : text
 }
 
-async function loadDetail() {
+function toggleToolPanel(panel: 'emoji' | 'order' | 'quickReply') {
+  activeToolPanel.value = activeToolPanel.value === panel ? null : panel
+}
+
+async function scrollToBottom() {
+  await nextTick()
+  if (!messagesContainer.value) return
+  messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+}
+
+async function loadDetail(resetCountdown = true) {
   const id = Number(route.params.id)
   if (!id) return
   try {
     const res = await paymentAPI.getMySupportConversation(id)
     detail.value = res.data
+    if (resetCountdown) autoRefresh.resetCountdown()
+    await scrollToBottom()
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   }
@@ -136,7 +244,7 @@ async function loadDetail() {
 
 async function loadOrders() {
   try {
-    const res = await paymentAPI.getMyOrders({ page: 1, page_size: 20 })
+    const res = await paymentAPI.getMyOrders({ page: 1, page_size: 50 })
     orders.value = res.data.items || []
   } catch {}
 }
@@ -148,14 +256,20 @@ async function loadQuickReplies() {
   } catch {}
 }
 
-async function bindOrder(orderId: number) {
+async function confirmBindOrder() {
   const id = Number(route.params.id)
+  if (!id || !pendingOrderId.value) return
+  bindingOrder.value = true
   try {
-    const res = await paymentAPI.bindSupportConversationOrder(id, { order_id: orderId })
+    const res = await paymentAPI.bindSupportConversationOrder(id, { order_id: pendingOrderId.value })
     detail.value = res.data
-    showOrderPicker.value = false
+    activeToolPanel.value = null
+    pendingOrderId.value = null
+    await scrollToBottom()
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    bindingOrder.value = false
   }
 }
 
@@ -167,6 +281,8 @@ async function sendReply() {
     const res = await paymentAPI.replyMySupportConversation(id, { message: replyMessage.value.trim() })
     detail.value = res.data
     replyMessage.value = ''
+    await scrollToBottom()
+    autoRefresh.resetCountdown()
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   } finally {
@@ -174,9 +290,13 @@ async function sendReply() {
   }
 }
 
-onMounted(() => {
-  loadDetail()
-  loadOrders()
-  loadQuickReplies()
+watch(() => detail.value?.messages?.length, () => {
+  scrollToBottom()
+})
+
+onMounted(async () => {
+  await Promise.all([loadDetail(), loadOrders(), loadQuickReplies()])
+  autoRefresh.setEnabled(true)
+  autoRefresh.start()
 })
 </script>
