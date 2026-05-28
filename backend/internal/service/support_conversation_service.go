@@ -22,6 +22,9 @@ type SupportConversation struct {
 	LastMessageAt      time.Time  `json:"last_message_at"`
 	LastUserMessageAt  *time.Time `json:"last_user_message_at,omitempty"`
 	LastAdminMessageAt *time.Time `json:"last_admin_message_at,omitempty"`
+	LastUserReadAt     *time.Time `json:"last_user_read_at,omitempty"`
+	LastAdminReadAt    *time.Time `json:"last_admin_read_at,omitempty"`
+	UnreadCount        int64      `json:"unread_count"`
 	Order              *dbent.PaymentOrder `json:"order,omitempty"`
 }
 
@@ -265,7 +268,7 @@ func (s *SupportConversationService) ReplyToConversation(ctx context.Context, re
 
 func (s *SupportConversationService) ListUserConversations(ctx context.Context, userID int64) ([]*SupportConversation, error) {
 	query := `
-		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at
+		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at
 		FROM support_conversations
 		WHERE user_id = $1
 		ORDER BY last_message_at DESC
@@ -308,7 +311,7 @@ func (s *SupportConversationService) ListAdminConversations(ctx context.Context,
 
 	args = append(args, pageSize, (page-1)*pageSize)
 	query := fmt.Sprintf(`
-		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at
+		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at
 		FROM support_conversations
 		WHERE %s
 		ORDER BY last_message_at DESC
@@ -327,6 +330,9 @@ func (s *SupportConversationService) ListAdminConversations(ctx context.Context,
 }
 
 func (s *SupportConversationService) GetConversationDetailForUser(ctx context.Context, conversationID, userID int64) (*SupportConversationDetail, error) {
+	if err := s.markConversationRead(ctx, conversationID, "user"); err != nil {
+		return nil, err
+	}
 	conversation, err := s.getConversation(ctx, conversationID)
 	if err != nil {
 		return nil, err
@@ -342,6 +348,9 @@ func (s *SupportConversationService) GetConversationDetailForUser(ctx context.Co
 }
 
 func (s *SupportConversationService) GetConversationDetailForAdmin(ctx context.Context, conversationID int64) (*SupportConversationDetail, error) {
+	if err := s.markConversationRead(ctx, conversationID, "admin"); err != nil {
+		return nil, err
+	}
 	conversation, err := s.getConversation(ctx, conversationID)
 	if err != nil {
 		return nil, err
@@ -355,14 +364,14 @@ func (s *SupportConversationService) GetConversationDetailForAdmin(ctx context.C
 
 func (s *SupportConversationService) getConversation(ctx context.Context, conversationID int64) (*SupportConversation, error) {
 	query := `
-		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at
+		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at
 		FROM support_conversations
 		WHERE id = $1
 	`
 	row := s.db.QueryRowContext(ctx, query, conversationID)
 	var conv SupportConversation
 	var orderID sql.NullInt64
-	if err := row.Scan(&conv.ID, &conv.UserID, &orderID, &conv.Subject, &conv.Status, &conv.CreatedAt, &conv.UpdatedAt, &conv.LastMessageAt, &conv.LastUserMessageAt, &conv.LastAdminMessageAt); err != nil {
+	if err := row.Scan(&conv.ID, &conv.UserID, &orderID, &conv.Subject, &conv.Status, &conv.CreatedAt, &conv.UpdatedAt, &conv.LastMessageAt, &conv.LastUserMessageAt, &conv.LastAdminMessageAt, &conv.LastUserReadAt, &conv.LastAdminReadAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, infraerrors.NotFound("SUPPORT_CONVERSATION_NOT_FOUND", "support conversation not found")
 		}
@@ -376,6 +385,11 @@ func (s *SupportConversationService) getConversation(ctx context.Context, conver
 			if order, err := s.entClient.PaymentOrder.Get(ctx, *conv.OrderID); err == nil {
 				conv.Order = order
 			}
+		}
+	}
+	if conv.LastAdminMessageAt != nil {
+		if conv.LastUserReadAt == nil || conv.LastAdminMessageAt.After(*conv.LastUserReadAt) {
+			conv.UnreadCount = 1
 		}
 	}
 	return &conv, nil
@@ -409,7 +423,7 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 	for rows.Next() {
 		item := &SupportConversation{}
 		var orderID sql.NullInt64
-		if err := rows.Scan(&item.ID, &item.UserID, &orderID, &item.Subject, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.LastMessageAt, &item.LastUserMessageAt, &item.LastAdminMessageAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &orderID, &item.Subject, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.LastMessageAt, &item.LastUserMessageAt, &item.LastAdminMessageAt, &item.LastUserReadAt, &item.LastAdminReadAt); err != nil {
 			return nil, fmt.Errorf("scan support conversation: %w", err)
 		}
 		if orderID.Valid {
@@ -422,7 +436,23 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 				}
 			}
 		}
+		if item.LastAdminMessageAt != nil {
+			if item.LastUserReadAt == nil || item.LastAdminMessageAt.After(*item.LastUserReadAt) {
+				item.UnreadCount = 1
+			}
+		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *SupportConversationService) markConversationRead(ctx context.Context, conversationID int64, reader string) error {
+	column := "last_user_read_at"
+	if reader == "admin" {
+		column = "last_admin_read_at"
+	}
+	if _, err := s.db.ExecContext(ctx, fmt.Sprintf(`UPDATE support_conversations SET %s = NOW() WHERE id = $1`, column), conversationID); err != nil {
+		return fmt.Errorf("mark support conversation read: %w", err)
+	}
+	return nil
 }

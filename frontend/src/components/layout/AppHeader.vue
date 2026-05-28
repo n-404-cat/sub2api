@@ -26,10 +26,16 @@
         <router-link
           v-if="user && !authStore.isAdmin"
           to="/support"
-          class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
+          class="relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-dark-400 dark:hover:bg-dark-800 dark:hover:text-white"
         >
           <Icon name="chatBubble" size="sm" />
           <span class="hidden sm:inline">{{ t('common.contactSupport') }}</span>
+          <span
+            v-if="supportStore.unreadCount > 0"
+            class="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-red-500 px-1.5 text-center text-[10px] font-semibold leading-[18px] text-white"
+          >
+            {{ supportStore.unreadCount > 99 ? '99+' : supportStore.unreadCount }}
+          </span>
         </router-link>
 
         <!-- Announcement Bell -->
@@ -206,6 +212,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
+import { useSupportStore } from '@/stores/support'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
@@ -218,6 +225,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const adminSettingsStore = useAdminSettingsStore()
 const onboardingStore = useOnboardingStore()
+const supportStore = useSupportStore()
 
 const user = computed(() => authStore.user)
 const dropdownOpen = ref(false)
@@ -308,6 +316,7 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 onMounted(() => {
+  supportStore.fetchConversations()
   document.addEventListener('click', handleClickOutside)
 })
 

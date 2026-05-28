@@ -171,6 +171,7 @@ import Icon from '@/components/icons/Icon.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { paymentAPI } from '@/api/payment'
 import { useAppStore } from '@/stores'
+import { useSupportStore } from '@/stores/support'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import type { PaymentOrder, SupportConversationDetail } from '@/types/payment'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
@@ -179,6 +180,7 @@ const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const supportStore = useSupportStore()
 
 const detail = ref<SupportConversationDetail | null>(null)
 const replyMessage = ref('')
@@ -293,6 +295,7 @@ async function loadDetail(resetCountdown = true) {
   try {
     const res = await paymentAPI.getMySupportConversation(id)
     detail.value = res.data
+    supportStore.markConversationSeen(id, res.data.conversation.last_message_at)
     if (resetCountdown) autoRefresh.resetCountdown()
     await scrollToBottom()
   } catch (err: unknown) {
@@ -347,6 +350,7 @@ watch(() => detail.value?.messages?.length, () => {
 
 onMounted(async () => {
   await Promise.all([loadDetail(), loadOrders()])
+  await supportStore.fetchConversations(true)
   autoRefresh.setEnabled(true)
   autoRefresh.start()
 })

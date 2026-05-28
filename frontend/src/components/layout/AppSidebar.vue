@@ -64,7 +64,15 @@
                   @click="handleMenuItemClick(child.path)"
                 >
                   <component :is="child.icon" class="h-4 w-4 flex-shrink-0" />
-                  <span>{{ child.label }}</span>
+                  <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                    <span class="truncate">{{ child.label }}</span>
+                    <span
+                      v-if="child.path === '/admin/orders/support' && supportStore.unreadCount > 0"
+                      class="rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-[18px] text-white"
+                    >
+                      {{ supportStore.unreadCount > 99 ? '99+' : supportStore.unreadCount }}
+                    </span>
+                  </span>
                 </router-link>
               </div>
             </template>
@@ -184,6 +192,7 @@ import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
+import { useSupportStore } from '@/stores/support'
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
@@ -232,6 +241,7 @@ const appStore = useAppStore()
 const authStore = useAuthStore()
 const onboardingStore = useOnboardingStore()
 const adminSettingsStore = useAdminSettingsStore()
+const supportStore = useSupportStore()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
@@ -887,6 +897,7 @@ watch(
 )
 
 onMounted(() => {
+  supportStore.fetchConversations()
   if (isAdmin.value) {
     adminSettingsStore.fetch()
   }

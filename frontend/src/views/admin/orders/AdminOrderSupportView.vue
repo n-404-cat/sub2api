@@ -186,18 +186,14 @@
     </div>
   </AppLayout>
 
-  <BaseDialog :show="showOrderPreview" :title="localText('订单详情', 'Order detail')" width="wide" @close="showOrderPreview = false">
-    <div v-if="selectedDetail?.conversation?.order" class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p><p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ selectedDetail.conversation.order.id }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedDetail.conversation.order.out_trade_no }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatPaymentType(selectedDetail.conversation.order.payment_type) }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('订单状态', 'Order status') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatStatus(selectedDetail.conversation.order.status) }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatAmount(selectedDetail.conversation.order) }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('创建时间', 'Created at') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(selectedDetail.conversation.order.created_at) }}</p></div>
-      </div>
-    </div>
-  </BaseDialog>
+  <AdminOrderDetail
+    :show="showOrderPreview"
+    :order="selectedDetail?.conversation?.order || null"
+    @close="showOrderPreview = false"
+    @cancel="() => {}"
+    @retry="() => {}"
+    @refund="() => {}"
+  />
 
   <BaseDialog :show="showOrderCardPreview" :title="localText('订单卡片详情', 'Order card detail')" width="wide" @close="showOrderCardPreview = false">
     <div class="space-y-3">
@@ -233,16 +229,19 @@ import { adminPaymentAPI } from '@/api/admin/payment'
 import * as adminUsersAPI from '@/api/admin/users'
 import { usePaymentStore } from '@/stores/payment'
 import { useAppStore } from '@/stores/app'
+import { useSupportStore } from '@/stores/support'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import type { PaymentOrder, SupportConversation, SupportConversationDetail } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Select from '@/components/common/Select.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import AdminOrderDetail from '@/components/admin/payment/AdminOrderDetail.vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
 const paymentStore = usePaymentStore()
+const supportStore = useSupportStore()
 
 const loading = ref(false)
 const sending = ref(false)
@@ -399,6 +398,7 @@ async function openConversation(id: number) {
   try {
     const res = await adminSupportAPI.get(id)
     selectedDetail.value = res.data
+    supportStore.markConversationSeen(id, res.data.conversation.last_message_at)
     pendingOrderId.value = res.data.conversation.order_id ?? null
     await loadRelatedOrders(res.data.conversation.user_id)
     autoRefresh.resetCountdown()
@@ -454,6 +454,7 @@ watch(() => selectedDetail.value?.messages?.length, () => {
 
 onMounted(async () => {
   await paymentStore.fetchConfig()
+  await supportStore.fetchConversations(true)
   await loadConversations()
   autoRefresh.setEnabled(true)
   autoRefresh.start()
