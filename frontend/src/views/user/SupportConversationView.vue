@@ -57,7 +57,19 @@
               ·
               {{ formatDateTime(message.created_at) }}
             </div>
-            <div class="whitespace-pre-wrap break-words">{{ message.message }}</div>
+            <div v-if="isOrderCard(message.message)" class="space-y-2">
+              <div class="text-xs font-semibold opacity-80">{{ localText('已关联订单', 'Linked order') }}</div>
+              <div class="rounded-xl border border-current/10 bg-white/40 p-3 dark:bg-black/10">
+                <div
+                  v-for="line in parseOrderCard(message.message)"
+                  :key="line"
+                  class="whitespace-pre-wrap break-words text-sm"
+                >
+                  {{ line }}
+                </div>
+              </div>
+            </div>
+            <div v-else class="whitespace-pre-wrap break-words">{{ message.message }}</div>
           </div>
         </div>
       </div>
@@ -72,10 +84,6 @@
             <Icon name="link" size="sm" />
             {{ localText('选择订单', 'Order') }}
           </button>
-          <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('quickReply')">
-            <Icon name="lightbulb" size="sm" />
-            {{ localText('快捷回复', 'Quick reply') }}
-          </button>
         </div>
 
         <div v-if="activeToolPanel === 'emoji'" class="flex flex-wrap gap-2">
@@ -87,18 +95,6 @@
           >
             {{ emoji }}
           </button>
-        </div>
-
-        <div v-else-if="activeToolPanel === 'quickReply'" class="flex flex-wrap gap-2">
-          <button
-            v-for="reply in quickReplies"
-            :key="reply"
-            class="rounded-full bg-primary-50 px-3 py-2 text-sm text-primary-700 hover:bg-primary-100 dark:bg-primary-900/20 dark:text-primary-200"
-            @click="insertQuickReply(reply)"
-          >
-            {{ reply }}
-          </button>
-          <p v-if="quickReplies.length === 0" class="text-sm text-gray-400">{{ localText('后台还没有配置快捷回复', 'No quick replies configured yet') }}</p>
         </div>
 
         <div v-else-if="activeToolPanel === 'order'" class="space-y-2">
@@ -174,9 +170,8 @@ const sending = ref(false)
 const bindingOrder = ref(false)
 const orders = ref<PaymentOrder[]>([])
 const pendingOrderId = ref<number | null>(null)
-const quickReplies = ref<string[]>([])
 const messagesContainer = ref<HTMLElement | null>(null)
-const activeToolPanel = ref<'emoji' | 'order' | 'quickReply' | null>(null)
+const activeToolPanel = ref<'emoji' | 'order' | null>(null)
 const emojis = ['😀', '😁', '😂', '😅', '😍', '🙏', '👍', '🎉', '📦', '✅', '⌛', '💬']
 
 function localText(zh: string, en: string): string {
@@ -215,11 +210,15 @@ function appendEmoji(emoji: string) {
   replyMessage.value += emoji
 }
 
-function insertQuickReply(text: string) {
-  replyMessage.value = replyMessage.value ? `${replyMessage.value}\n${text}` : text
+function isOrderCard(message: string): boolean {
+  return message.startsWith('[ORDER_CARD]')
 }
 
-function toggleToolPanel(panel: 'emoji' | 'order' | 'quickReply') {
+function parseOrderCard(message: string): string[] {
+  return message.replace('[ORDER_CARD]\n', '').split('\n').filter(Boolean)
+}
+
+function toggleToolPanel(panel: 'emoji' | 'order') {
   activeToolPanel.value = activeToolPanel.value === panel ? null : panel
 }
 
@@ -246,13 +245,6 @@ async function loadOrders() {
   try {
     const res = await paymentAPI.getMyOrders({ page: 1, page_size: 50 })
     orders.value = res.data.items || []
-  } catch {}
-}
-
-async function loadQuickReplies() {
-  try {
-    const res = await paymentAPI.getConfig()
-    quickReplies.value = res.data.support_quick_replies || []
   } catch {}
 }
 
@@ -295,7 +287,7 @@ watch(() => detail.value?.messages?.length, () => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadDetail(), loadOrders(), loadQuickReplies()])
+  await Promise.all([loadDetail(), loadOrders()])
   autoRefresh.setEnabled(true)
   autoRefresh.start()
 })

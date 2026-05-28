@@ -87,12 +87,77 @@
                 <div class="mb-1 text-xs opacity-70">
                   {{ message.sender_type === 'admin' ? localText('客服', 'Support') : localText('用户', 'User') }} · {{ formatDateTime(message.created_at) }}
                 </div>
-                <div class="whitespace-pre-wrap break-words">{{ message.message }}</div>
+                <div v-if="isOrderCard(message.message)" class="space-y-2">
+                  <div class="text-xs font-semibold opacity-80">{{ localText('订单卡片', 'Order card') }}</div>
+                  <div class="rounded-xl border border-current/10 bg-white/40 p-3 dark:bg-black/10">
+                    <div
+                      v-for="line in parseOrderCard(message.message)"
+                      :key="line"
+                      class="whitespace-pre-wrap break-words text-sm"
+                    >
+                      {{ line }}
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="whitespace-pre-wrap break-words">{{ message.message }}</div>
               </div>
             </div>
 
             <div class="space-y-3">
-              <div class="flex flex-wrap gap-2">
+              <div class="flex items-center gap-3 border-b border-gray-100 pb-3 dark:border-dark-700">
+                <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('emoji')">
+                  {{ localText('表情', 'Emoji') }}
+                </button>
+                <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('order')">
+                  {{ localText('选择订单', 'Order') }}
+                </button>
+                <button class="btn btn-secondary btn-sm" @click="toggleToolPanel('quickReply')">
+                  {{ localText('快捷回复', 'Quick reply') }}
+                </button>
+              </div>
+
+              <div v-if="activeToolPanel === 'emoji'" class="flex flex-wrap gap-2">
+                <button
+                  v-for="emoji in emojis"
+                  :key="emoji"
+                  class="rounded-full border border-gray-200 px-3 py-2 text-lg hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800"
+                  @click="replyMessage += emoji"
+                >
+                  {{ emoji }}
+                </button>
+              </div>
+
+              <div v-else-if="activeToolPanel === 'order'" class="space-y-2">
+                <div
+                  v-for="order in relatedOrders"
+                  :key="order.id"
+                  :class="[
+                    'cursor-pointer rounded-2xl border p-4 transition-colors',
+                    pendingOrderId === order.id
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800'
+                  ]"
+                  @click="pendingOrderId = order.id"
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ order.out_trade_no }}</p>
+                    <span class="text-xs text-gray-400">#{{ order.id }}</span>
+                  </div>
+                  <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>{{ localText('金额', 'Amount') }}: {{ formatAmount(order) }}</span>
+                    <span>{{ localText('状态', 'Status') }}: {{ order.status }}</span>
+                    <span>{{ localText('方式', 'Method') }}: {{ order.payment_type }}</span>
+                    <span>{{ localText('时间', 'Created') }}: {{ formatShortTime(order.created_at) }}</span>
+                  </div>
+                </div>
+                <div class="flex justify-end">
+                  <button class="btn btn-primary" :disabled="!pendingOrderId || bindingOrder" @click="bindOrderForConversation">
+                    {{ bindingOrder ? t('common.processing') : localText('确认关联订单', 'Bind order') }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-else-if="activeToolPanel === 'quickReply'" class="flex flex-wrap gap-2">
                 <button
                   v-for="reply in quickReplies"
                   :key="reply"
@@ -133,6 +198,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminSupportAPI } from '@/api/admin'
+import { adminPaymentAPI } from '@/api/admin/payment'
 import { usePaymentStore } from '@/stores/payment'
 import { useAppStore } from '@/stores/app'
 import { extractI18nErrorMessage } from '@/utils/apiError'
@@ -155,10 +221,15 @@ const keyword = ref('')
 const status = ref('')
 const replyMessage = ref('')
 const showOrderPreview = ref(false)
+const bindingOrder = ref(false)
+const pendingOrderId = ref<number | null>(null)
+const relatedOrders = ref<PaymentOrder[]>([])
+const activeToolPanel = ref<'emoji' | 'order' | 'quickReply' | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const quickReplies = computed(() => paymentStore.config?.support_quick_replies || [])
+const emojis = ['😀', '😁', '😂', '😅', '😍', '🙏', '👍', '🎉', '📦', '✅', '⌛', '💬']
 const statusOptions = [
   { value: '', label: '全部状态' },
   { value: 'open', label: '进行中' },
@@ -185,13 +256,29 @@ function formatAmount(order: PaymentOrder): string {
   return `${prefix}${order.amount.toFixed(2)}`
 }
 
+function formatShortTime(value: string): string {
+  return new Date(value).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 function debounceLoad() {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => loadConversations(), 300)
 }
 
+function toggleToolPanel(panel: 'emoji' | 'order' | 'quickReply') {
+  activeToolPanel.value = activeToolPanel.value === panel ? null : panel
+}
+
 function insertQuickReply(text: string) {
   replyMessage.value = replyMessage.value ? `${replyMessage.value}\n${text}` : text
+}
+
+function isOrderCard(message: string): boolean {
+  return message.startsWith('[ORDER_CARD]')
+}
+
+function parseOrderCard(message: string): string[] {
+  return message.replace('[ORDER_CARD]\n', '').split('\n').filter(Boolean)
 }
 
 async function scrollToBottom() {
@@ -220,10 +307,37 @@ async function openConversation(id: number) {
   try {
     const res = await adminSupportAPI.get(id)
     selectedDetail.value = res.data
+    pendingOrderId.value = res.data.conversation.order_id ?? null
+    await loadRelatedOrders(res.data.conversation.user_id)
     autoRefresh.resetCountdown()
     await scrollToBottom()
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  }
+}
+
+async function loadRelatedOrders(userId: number) {
+  try {
+    const res = await adminPaymentAPI.getOrders({ page: 1, page_size: 50, user_id: userId })
+    relatedOrders.value = res.data.items || []
+  } catch {
+    relatedOrders.value = []
+  }
+}
+
+async function bindOrderForConversation() {
+  if (!selectedConversation.value || !pendingOrderId.value) return
+  bindingOrder.value = true
+  try {
+    const res = await adminSupportAPI.bindOrder(selectedConversation.value.id, { order_id: pendingOrderId.value })
+    selectedDetail.value = res.data
+    activeToolPanel.value = null
+    pendingOrderId.value = null
+    await scrollToBottom()
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    bindingOrder.value = false
   }
 }
 

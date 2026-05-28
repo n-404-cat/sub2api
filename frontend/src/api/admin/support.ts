@@ -20,6 +20,9 @@ export const adminSupportAPI = {
   reply(id: number, data: { message: string }) {
     return apiClient.post<SupportConversationDetail>(`/admin/payment/support/conversations/${id}/messages`, data)
   },
+  bindOrder(id: number, data: { order_id: number }) {
+    return apiClient.post<SupportConversationDetail>(`/payment/support/conversations/${id}/bind-order`, data)
+  },
 }
 
 export default adminSupportAPI

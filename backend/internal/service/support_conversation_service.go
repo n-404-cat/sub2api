@@ -177,15 +177,43 @@ func (s *SupportConversationService) BindOrderToConversation(ctx context.Context
 	if order.UserID != req.UserID {
 		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
 	}
-	_, err = s.db.ExecContext(ctx, `
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin bind support order tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now()
+	_, err = tx.ExecContext(ctx, `
 		UPDATE support_conversations
 		SET order_id = $2,
 		    subject = CASE WHEN subject = '' OR subject = '客服咨询' THEN $3 ELSE subject END,
-		    updated_at = NOW()
+		    updated_at = $4,
+		    last_message_at = $4,
+		    last_user_message_at = $4
 		WHERE id = $1
-	`, req.ConversationID, req.OrderID, fmt.Sprintf("订单咨询 #%d", req.OrderID))
+	`, req.ConversationID, req.OrderID, fmt.Sprintf("订单咨询 #%d", req.OrderID), now)
 	if err != nil {
 		return nil, fmt.Errorf("bind support order: %w", err)
+	}
+
+	orderCard := fmt.Sprintf("[ORDER_CARD]\n订单号: %s\n订单ID: %d\n金额: %.2f\n状态: %s\n支付方式: %s\n创建时间: %s",
+		order.OutTradeNo,
+		order.ID,
+		order.Amount,
+		order.Status,
+		order.PaymentType,
+		order.CreatedAt.Format(time.RFC3339),
+	)
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO support_messages (conversation_id, sender_type, sender_user_id, message, created_at)
+		VALUES ($1, 'user', $2, $3, $4)
+	`, req.ConversationID, req.UserID, orderCard, now); err != nil {
+		return nil, fmt.Errorf("insert support order card: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit bind support order tx: %w", err)
 	}
 	return s.GetConversationDetailForUser(ctx, req.ConversationID, req.UserID)
 }
