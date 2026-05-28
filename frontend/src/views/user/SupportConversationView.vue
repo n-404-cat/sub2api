@@ -150,13 +150,32 @@
   </AppLayout>
 
   <BaseDialog :show="showOrderCardPreview" :title="localText('订单详情', 'Order detail')" width="wide" @close="showOrderCardPreview = false">
-    <div class="space-y-3">
-      <div
-        v-for="line in selectedOrderCardLines"
-        :key="line"
-        class="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200"
-      >
-        {{ line }}
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('订单号', 'Order No') }}</p>
+          <p class="text-sm font-medium text-gray-900 dark:text-white">{{ orderCardDetail.orderNo || '-' }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('订单ID', 'Order ID') }}</p>
+          <p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ orderCardDetail.orderId || '-' }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('状态', 'Status') }}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300">{{ orderCardDetail.status || '-' }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('支付方式', 'Payment') }}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300">{{ orderCardDetail.paymentType || '-' }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('金额', 'Amount') }}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300">{{ orderCardDetail.amount || '-' }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('创建时间', 'Created at') }}</p>
+          <p class="text-sm text-gray-700 dark:text-gray-300">{{ orderCardDetail.createdAt || '-' }}</p>
+        </div>
       </div>
     </div>
   </BaseDialog>
@@ -192,6 +211,14 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const activeToolPanel = ref<'emoji' | 'order' | null>(null)
 const showOrderCardPreview = ref(false)
 const selectedOrderCardLines = ref<string[]>([])
+const orderCardDetail = ref<{ orderNo: string; orderId: string; status: string; paymentType: string; amount: string; createdAt: string }>({
+  orderNo: '',
+  orderId: '',
+  status: '',
+  paymentType: '',
+  amount: '',
+  createdAt: '',
+})
 const emojis = ['😀', '😁', '😂', '😅', '😍', '🙏', '👍', '🎉', '📦', '✅', '⌛', '💬']
 
 function localText(zh: string, en: string): string {
@@ -276,6 +303,20 @@ function parseOrderCard(message: string): string[] {
 
 function openOrderCardPreview(message: string) {
   selectedOrderCardLines.value = parseOrderCard(message)
+  const entries = Object.fromEntries(
+    selectedOrderCardLines.value
+      .map(line => line.split(': '))
+      .filter(parts => parts.length >= 2)
+      .map(([key, ...rest]) => [key, rest.join(': ')])
+  )
+  orderCardDetail.value = {
+    orderNo: String(entries['订单号'] || ''),
+    orderId: String(entries['订单ID'] || ''),
+    status: String(entries['状态'] || ''),
+    paymentType: String(entries['支付方式'] || ''),
+    amount: String(entries['金额'] || ''),
+    createdAt: String(entries['创建时间'] || ''),
+  }
   showOrderCardPreview.value = true
 }
 

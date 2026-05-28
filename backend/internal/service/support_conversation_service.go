@@ -75,6 +75,13 @@ type SupportConversationService struct {
 	entClient *dbent.Client
 }
 
+type supportConversationReader string
+
+const (
+	supportReaderUser  supportConversationReader = "user"
+	supportReaderAdmin supportConversationReader = "admin"
+)
+
 func NewSupportConversationService(db *sql.DB, entClient *dbent.Client) *SupportConversationService {
 	return &SupportConversationService{db: db, entClient: entClient}
 }
@@ -278,7 +285,7 @@ func (s *SupportConversationService) ListUserConversations(ctx context.Context, 
 		return nil, fmt.Errorf("list user support conversations: %w", err)
 	}
 	defer rows.Close()
-	return s.scanConversationRows(ctx, rows)
+	return s.scanConversationRows(ctx, rows, supportReaderUser)
 }
 
 func (s *SupportConversationService) ListAdminConversations(ctx context.Context, p SupportConversationListParams) ([]*SupportConversation, int64, error) {
@@ -322,7 +329,7 @@ func (s *SupportConversationService) ListAdminConversations(ctx context.Context,
 		return nil, 0, fmt.Errorf("list admin support conversations: %w", err)
 	}
 	defer rows.Close()
-	items, err := s.scanConversationRows(ctx, rows)
+	items, err := s.scanConversationRows(ctx, rows, supportReaderAdmin)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -387,11 +394,6 @@ func (s *SupportConversationService) getConversation(ctx context.Context, conver
 			}
 		}
 	}
-	if conv.LastAdminMessageAt != nil {
-		if conv.LastUserReadAt == nil || conv.LastAdminMessageAt.After(*conv.LastUserReadAt) {
-			conv.UnreadCount = 1
-		}
-	}
 	return &conv, nil
 }
 
@@ -418,7 +420,7 @@ func (s *SupportConversationService) getConversationMessages(ctx context.Context
 	return messages, rows.Err()
 }
 
-func (s *SupportConversationService) scanConversationRows(ctx context.Context, rows *sql.Rows) ([]*SupportConversation, error) {
+func (s *SupportConversationService) scanConversationRows(ctx context.Context, rows *sql.Rows, reader supportConversationReader) ([]*SupportConversation, error) {
 	var items []*SupportConversation
 	for rows.Next() {
 		item := &SupportConversation{}
@@ -436,14 +438,27 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 				}
 			}
 		}
-		if item.LastAdminMessageAt != nil {
-			if item.LastUserReadAt == nil || item.LastAdminMessageAt.After(*item.LastUserReadAt) {
-				item.UnreadCount = 1
-			}
-		}
+		item.UnreadCount = computeUnreadCount(item, reader)
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func computeUnreadCount(item *SupportConversation, reader supportConversationReader) int64 {
+	if item == nil {
+		return 0
+	}
+	switch reader {
+	case supportReaderAdmin:
+		if item.LastUserMessageAt != nil && (item.LastAdminReadAt == nil || item.LastUserMessageAt.After(*item.LastAdminReadAt)) {
+			return 1
+		}
+	case supportReaderUser:
+		if item.LastAdminMessageAt != nil && (item.LastUserReadAt == nil || item.LastAdminMessageAt.After(*item.LastUserReadAt)) {
+			return 1
+		}
+	}
+	return 0
 }
 
 func (s *SupportConversationService) markConversationRead(ctx context.Context, conversationID int64, reader string) error {
