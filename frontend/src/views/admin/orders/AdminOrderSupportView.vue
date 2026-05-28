@@ -12,6 +12,7 @@
           <Select v-model="status" :options="statusOptions" class="w-40" @change="loadConversations" />
           <div class="flex flex-1 items-center justify-end gap-2">
             <span class="text-xs text-gray-400">{{ autoRefresh.enabled.value ? localText('自动刷新中', 'Auto refresh on') : localText('自动刷新关闭', 'Auto refresh off') }}</span>
+            <button class="btn btn-secondary" @click="goQuickReplyConfig">{{ localText('配置快捷回复', 'Configure quick replies') }}</button>
             <button class="btn btn-secondary" @click="loadConversations">{{ t('common.refresh') }}</button>
           </div>
         </div>
@@ -48,7 +49,9 @@
               </div>
               <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-800">
                 <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('用户ID', 'User ID') }}</p>
-                <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">#{{ selectedDetail.conversation.user_id }}</p>
+                <button class="mt-1 text-left text-sm font-semibold text-primary-700 hover:underline dark:text-primary-300" @click="openUserPreview(selectedDetail.conversation.user_id)">
+                  #{{ selectedDetail.conversation.user_id }}
+                </button>
               </div>
               <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-800">
                 <p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('会话状态', 'Status') }}</p>
@@ -68,8 +71,8 @@
               <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <div><p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('订单号', 'Order No') }}</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ selectedDetail.conversation.order.out_trade_no }}</p></div>
                 <div><p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('金额', 'Amount') }}</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatAmount(selectedDetail.conversation.order) }}</p></div>
-                <div><p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('支付方式', 'Payment') }}</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ selectedDetail.conversation.order.payment_type }}</p></div>
-                <div><p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('订单状态', 'Order status') }}</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ selectedDetail.conversation.order.status }}</p></div>
+                <div><p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('支付方式', 'Payment') }}</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatPaymentType(selectedDetail.conversation.order.payment_type) }}</p></div>
+                <div><p class="text-xs text-gray-400 dark:text-gray-500">{{ localText('订单状态', 'Order status') }}</p><p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatStatus(selectedDetail.conversation.order.status) }}</p></div>
               </div>
             </div>
 
@@ -89,7 +92,10 @@
                 </div>
                 <div v-if="isOrderCard(message.message)" class="space-y-2">
                   <div class="text-xs font-semibold opacity-80">{{ localText('订单卡片', 'Order card') }}</div>
-                  <div class="rounded-xl border border-current/10 bg-white/40 p-3 dark:bg-black/10">
+                  <button
+                    class="w-full rounded-xl border border-current/10 bg-white/40 p-3 text-left transition hover:bg-white/60 dark:bg-black/10 dark:hover:bg-black/20"
+                    @click="openOrderCardPreview(message.message)"
+                  >
                     <div
                       v-for="line in parseOrderCard(message.message)"
                       :key="line"
@@ -97,7 +103,7 @@
                     >
                       {{ line }}
                     </div>
-                  </div>
+                  </button>
                 </div>
                 <div v-else class="whitespace-pre-wrap break-words">{{ message.message }}</div>
               </div>
@@ -185,11 +191,36 @@
       <div class="grid grid-cols-2 gap-4">
         <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p><p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ selectedDetail.conversation.order.id }}</p></div>
         <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedDetail.conversation.order.out_trade_no }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedDetail.conversation.order.payment_type }}</p></div>
-        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('订单状态', 'Order status') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ selectedDetail.conversation.order.status }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.paymentMethod') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatPaymentType(selectedDetail.conversation.order.payment_type) }}</p></div>
+        <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('订单状态', 'Order status') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatStatus(selectedDetail.conversation.order.status) }}</p></div>
         <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.amount') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatAmount(selectedDetail.conversation.order) }}</p></div>
         <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('创建时间', 'Created at') }}</p><p class="text-sm text-gray-700 dark:text-gray-300">{{ formatDateTime(selectedDetail.conversation.order.created_at) }}</p></div>
       </div>
+    </div>
+  </BaseDialog>
+
+  <BaseDialog :show="showOrderCardPreview" :title="localText('订单卡片详情', 'Order card detail')" width="wide" @close="showOrderCardPreview = false">
+    <div class="space-y-3">
+      <div
+        v-for="line in selectedOrderCardLines"
+        :key="line"
+        class="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200"
+      >
+        {{ line }}
+      </div>
+    </div>
+  </BaseDialog>
+
+  <BaseDialog :show="showUserPreview" :title="localText('用户信息', 'User info')" width="wide" @close="showUserPreview = false">
+    <div v-if="selectedUser" class="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">ID</p><p class="text-sm font-medium text-gray-900 dark:text-white">#{{ selectedUser.id }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('邮箱', 'Email') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.email || '-' }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('用户名', 'Username') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.username || '-' }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('角色', 'Role') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.role || '-' }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('状态', 'Status') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.status || '-' }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('余额', 'Balance') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.balance ?? '-' }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('并发', 'Concurrency') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.concurrency ?? '-' }}</p></div>
+      <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ localText('注册时间', 'Created at') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedUser.created_at || '-' }}</p></div>
     </div>
   </BaseDialog>
 </template>
@@ -199,6 +230,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminSupportAPI } from '@/api/admin'
 import { adminPaymentAPI } from '@/api/admin/payment'
+import * as adminUsersAPI from '@/api/admin/users'
 import { usePaymentStore } from '@/stores/payment'
 import { useAppStore } from '@/stores/app'
 import { extractI18nErrorMessage } from '@/utils/apiError'
@@ -226,6 +258,10 @@ const pendingOrderId = ref<number | null>(null)
 const relatedOrders = ref<PaymentOrder[]>([])
 const activeToolPanel = ref<'emoji' | 'order' | 'quickReply' | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
+const showOrderCardPreview = ref(false)
+const selectedOrderCardLines = ref<string[]>([])
+const showUserPreview = ref(false)
+const selectedUser = ref<Record<string, any> | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const quickReplies = computed(() => paymentStore.config?.support_quick_replies || [])
@@ -256,6 +292,37 @@ function formatAmount(order: PaymentOrder): string {
   return `${prefix}${order.amount.toFixed(2)}`
 }
 
+function formatStatus(status: string): string {
+  const map: Record<string, string> = {
+    PENDING: '待支付',
+    PAID: '已支付',
+    RECHARGING: '充值中',
+    COMPLETED: '已完成',
+    EXPIRED: '已过期',
+    CANCELLED: '已取消',
+    FAILED: '失败',
+    REFUND_REQUESTED: '退款申请中',
+    REFUNDING: '退款中',
+    PARTIALLY_REFUNDED: '部分退款',
+    REFUNDED: '已退款',
+    REFUND_FAILED: '退款失败',
+  }
+  return map[status] || status
+}
+
+function formatPaymentType(type: string): string {
+  const map: Record<string, string> = {
+    alipay: '支付宝',
+    wxpay: '微信支付',
+    alipay_direct: '支付宝直连',
+    wxpay_direct: '微信直连',
+    stripe: 'Stripe',
+    easypay: 'EasyPay',
+    airwallex: 'Airwallex',
+  }
+  return map[type] || type
+}
+
 function formatShortTime(value: string): string {
   return new Date(value).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
@@ -273,12 +340,37 @@ function insertQuickReply(text: string) {
   replyMessage.value = replyMessage.value ? `${replyMessage.value}\n${text}` : text
 }
 
+function goQuickReplyConfig() {
+  if (typeof window !== 'undefined') {
+    window.location.href = '/admin/orders/dashboard'
+  }
+}
+
 function isOrderCard(message: string): boolean {
   return message.startsWith('[ORDER_CARD]')
 }
 
 function parseOrderCard(message: string): string[] {
-  return message.replace('[ORDER_CARD]\n', '').split('\n').filter(Boolean)
+  return message
+    .replace('[ORDER_CARD]\n', '')
+    .replace(/状态: (.+)/, (_, status) => `状态: ${formatStatus(String(status))}`)
+    .replace(/支付方式: (.+)/, (_, type) => `支付方式: ${formatPaymentType(String(type))}`)
+    .split('\n')
+    .filter(Boolean)
+}
+
+function openOrderCardPreview(message: string) {
+  selectedOrderCardLines.value = parseOrderCard(message)
+  showOrderCardPreview.value = true
+}
+
+async function openUserPreview(userId: number) {
+  try {
+    selectedUser.value = await adminUsersAPI.getById(userId)
+    showUserPreview.value = true
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'common', t('common.error')))
+  }
 }
 
 async function scrollToBottom() {

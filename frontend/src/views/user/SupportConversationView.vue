@@ -59,7 +59,10 @@
             </div>
             <div v-if="isOrderCard(message.message)" class="space-y-2">
               <div class="text-xs font-semibold opacity-80">{{ localText('已关联订单', 'Linked order') }}</div>
-              <div class="rounded-xl border border-current/10 bg-white/40 p-3 dark:bg-black/10">
+              <button
+                class="w-full rounded-xl border border-current/10 bg-white/40 p-3 text-left transition hover:bg-white/60 dark:bg-black/10 dark:hover:bg-black/20"
+                @click="openOrderCardPreview(message.message)"
+              >
                 <div
                   v-for="line in parseOrderCard(message.message)"
                   :key="line"
@@ -67,7 +70,7 @@
                 >
                   {{ line }}
                 </div>
-              </div>
+              </button>
             </div>
             <div v-else class="whitespace-pre-wrap break-words">{{ message.message }}</div>
           </div>
@@ -145,6 +148,18 @@
       </div>
     </div>
   </AppLayout>
+
+  <BaseDialog :show="showOrderCardPreview" :title="localText('订单详情', 'Order detail')" width="wide" @close="showOrderCardPreview = false">
+    <div class="space-y-3">
+      <div
+        v-for="line in selectedOrderCardLines"
+        :key="line"
+        class="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200"
+      >
+        {{ line }}
+      </div>
+    </div>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
@@ -153,6 +168,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import { paymentAPI } from '@/api/payment'
 import { useAppStore } from '@/stores'
 import { extractI18nErrorMessage } from '@/utils/apiError'
@@ -172,6 +188,8 @@ const orders = ref<PaymentOrder[]>([])
 const pendingOrderId = ref<number | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const activeToolPanel = ref<'emoji' | 'order' | null>(null)
+const showOrderCardPreview = ref(false)
+const selectedOrderCardLines = ref<string[]>([])
 const emojis = ['😀', '😁', '😂', '😅', '😍', '🙏', '👍', '🎉', '📦', '✅', '⌛', '💬']
 
 function localText(zh: string, en: string): string {
@@ -206,6 +224,37 @@ function formatAmount(order: PaymentOrder): string {
   return `${prefix}${order.amount.toFixed(2)}`
 }
 
+function formatStatus(status: string): string {
+  const map: Record<string, string> = {
+    PENDING: '待支付',
+    PAID: '已支付',
+    RECHARGING: '充值中',
+    COMPLETED: '已完成',
+    EXPIRED: '已过期',
+    CANCELLED: '已取消',
+    FAILED: '失败',
+    REFUND_REQUESTED: '退款申请中',
+    REFUNDING: '退款中',
+    PARTIALLY_REFUNDED: '部分退款',
+    REFUNDED: '已退款',
+    REFUND_FAILED: '退款失败',
+  }
+  return map[status] || status
+}
+
+function formatPaymentType(type: string): string {
+  const map: Record<string, string> = {
+    alipay: '支付宝',
+    wxpay: '微信支付',
+    alipay_direct: '支付宝直连',
+    wxpay_direct: '微信直连',
+    stripe: 'Stripe',
+    easypay: 'EasyPay',
+    airwallex: 'Airwallex',
+  }
+  return map[type] || type
+}
+
 function appendEmoji(emoji: string) {
   replyMessage.value += emoji
 }
@@ -215,7 +264,17 @@ function isOrderCard(message: string): boolean {
 }
 
 function parseOrderCard(message: string): string[] {
-  return message.replace('[ORDER_CARD]\n', '').split('\n').filter(Boolean)
+  return message
+    .replace('[ORDER_CARD]\n', '')
+    .replace(/状态: (.+)/, (_, status) => `状态: ${formatStatus(String(status))}`)
+    .replace(/支付方式: (.+)/, (_, type) => `支付方式: ${formatPaymentType(String(type))}`)
+    .split('\n')
+    .filter(Boolean)
+}
+
+function openOrderCardPreview(message: string) {
+  selectedOrderCardLines.value = parseOrderCard(message)
+  showOrderCardPreview.value = true
 }
 
 function toggleToolPanel(panel: 'emoji' | 'order') {
