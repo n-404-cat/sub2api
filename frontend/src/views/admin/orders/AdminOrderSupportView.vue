@@ -203,25 +203,13 @@
   </AppLayout>
 
   <AdminOrderDetail
-    :show="showOrderPreview"
-    :order="selectedDetail?.conversation?.order || null"
-    @close="showOrderPreview = false"
+    :show="showOrderPreview || showOrderCardPreview"
+    :order="selectedDetail?.conversation?.order || selectedOrderCardOrder || null"
+    @close="closeOrderPreview"
     @cancel="() => {}"
     @retry="() => {}"
     @refund="() => {}"
   />
-
-  <BaseDialog :show="showOrderCardPreview" :title="localText('订单卡片详情', 'Order card detail')" width="wide" @close="showOrderCardPreview = false">
-    <div class="space-y-3">
-      <div
-        v-for="line in selectedOrderCardLines"
-        :key="line"
-        class="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200"
-      >
-        {{ line }}
-      </div>
-    </div>
-  </BaseDialog>
 
   <BaseDialog :show="showUserPreview" :title="localText('用户信息', 'User info')" width="wide" @close="showUserPreview = false">
     <div v-if="selectedUser" class="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -275,6 +263,7 @@ const activeToolPanel = ref<'emoji' | 'order' | 'quickReply' | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const showOrderCardPreview = ref(false)
 const selectedOrderCardLines = ref<string[]>([])
+const selectedOrderCardOrder = ref<PaymentOrder | null>(null)
 const showUserPreview = ref(false)
 const selectedUser = ref<Record<string, any> | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -344,7 +333,9 @@ function formatShortTime(value: string): string {
 
 function conversationPreview(item: SupportConversation): string {
   const prefix = item.last_message_sender_type === 'admin' ? localText('客服', 'Support') : localText('用户', 'User')
-  const preview = item.last_message_preview?.replace('[ORDER_CARD]\n', '').split('\n')[0] || localText('暂无消息', 'No messages')
+  const preview = item.last_message_preview?.startsWith('[ORDER_CARD]')
+    ? `[${localText('订单卡片', 'Order card')}] ${item.last_message_preview.replace('[ORDER_CARD]\n', '').split('\n')[0]}`
+    : (item.last_message_preview?.split('\n')[0] || localText('暂无消息', 'No messages'))
   return `${prefix}: ${preview}`
 }
 
@@ -367,6 +358,12 @@ function goQuickReplyConfig() {
   }
 }
 
+function closeOrderPreview() {
+  showOrderPreview.value = false
+  showOrderCardPreview.value = false
+  selectedOrderCardOrder.value = null
+}
+
 function isOrderCard(message: string): boolean {
   return message.startsWith('[ORDER_CARD]')
 }
@@ -382,6 +379,9 @@ function parseOrderCard(message: string): string[] {
 
 function openOrderCardPreview(message: string) {
   selectedOrderCardLines.value = parseOrderCard(message)
+  if (selectedDetail.value?.conversation?.order) {
+    selectedOrderCardOrder.value = selectedDetail.value.conversation.order
+  }
   showOrderCardPreview.value = true
 }
 
