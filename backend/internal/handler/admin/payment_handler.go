@@ -307,6 +307,22 @@ func (h *PaymentHandler) ReplySupportConversation(c *gin.Context) {
 	response.Success(c, detail)
 }
 
+func (h *PaymentHandler) MarkSupportConversationRead(c *gin.Context) {
+	if h.supportService == nil {
+		response.ErrorFrom(c, responseErrorSupportNotReady())
+		return
+	}
+	conversationID, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.supportService.MarkConversationReadForAdmin(c.Request.Context(), conversationID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "read"})
+}
+
 // --- Subscription Plans ---
 
 // ListPlans returns all subscription plans.

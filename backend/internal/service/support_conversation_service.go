@@ -343,9 +343,6 @@ func (s *SupportConversationService) ListAdminConversations(ctx context.Context,
 }
 
 func (s *SupportConversationService) GetConversationDetailForUser(ctx context.Context, conversationID, userID int64) (*SupportConversationDetail, error) {
-	if err := s.markConversationRead(ctx, conversationID, "user"); err != nil {
-		return nil, err
-	}
 	conversation, err := s.getConversation(ctx, conversationID)
 	if err != nil {
 		return nil, err
@@ -361,9 +358,6 @@ func (s *SupportConversationService) GetConversationDetailForUser(ctx context.Co
 }
 
 func (s *SupportConversationService) GetConversationDetailForAdmin(ctx context.Context, conversationID int64) (*SupportConversationDetail, error) {
-	if err := s.markConversationRead(ctx, conversationID, "admin"); err != nil {
-		return nil, err
-	}
 	conversation, err := s.getConversation(ctx, conversationID)
 	if err != nil {
 		return nil, err
@@ -476,4 +470,19 @@ func (s *SupportConversationService) markConversationRead(ctx context.Context, c
 		return fmt.Errorf("mark support conversation read: %w", err)
 	}
 	return nil
+}
+
+func (s *SupportConversationService) MarkConversationReadForUser(ctx context.Context, conversationID, userID int64) error {
+	conversation, err := s.getConversation(ctx, conversationID)
+	if err != nil {
+		return err
+	}
+	if conversation.UserID != userID {
+		return infraerrors.Forbidden("FORBIDDEN", "no permission for this conversation")
+	}
+	return s.markConversationRead(ctx, conversationID, "user")
+}
+
+func (s *SupportConversationService) MarkConversationReadForAdmin(ctx context.Context, conversationID int64) error {
+	return s.markConversationRead(ctx, conversationID, "admin")
 }

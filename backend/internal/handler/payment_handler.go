@@ -420,6 +420,8 @@ type BindSupportConversationOrderBody struct {
 	OrderID int64 `json:"order_id"`
 }
 
+type MarkSupportConversationReadBody struct{}
+
 // RequestRefund submits a refund request for a completed order.
 // POST /api/v1/payment/orders/:id/refund-request
 func (h *PaymentHandler) RequestRefund(c *gin.Context) {
@@ -650,6 +652,27 @@ func (h *PaymentHandler) BindSupportConversationOrder(c *gin.Context) {
 		return
 	}
 	response.Success(c, detail)
+}
+
+func (h *PaymentHandler) MarkMySupportConversationRead(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	if h.supportService == nil {
+		response.ErrorFrom(c, infraerrors.InternalServer("SUPPORT_NOT_READY", "support conversation service is not ready"))
+		return
+	}
+	conversationID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid conversation ID")
+		return
+	}
+	if err := h.supportService.MarkConversationReadForUser(c.Request.Context(), conversationID, subject.UserID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "read"})
 }
 
 // GetRefundEligibleProviders returns provider instance IDs that allow user refund.
