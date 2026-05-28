@@ -317,10 +317,12 @@ function handleClickOutside(event: MouseEvent) {
 
 onMounted(() => {
   supportStore.fetchConversations()
+  supportStore.startPolling()
   document.addEventListener('click', handleClickOutside)
 })
 
 onBeforeUnmount(() => {
+  supportStore.stopPolling()
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

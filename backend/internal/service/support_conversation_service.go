@@ -25,6 +25,8 @@ type SupportConversation struct {
 	LastUserReadAt     *time.Time `json:"last_user_read_at,omitempty"`
 	LastAdminReadAt    *time.Time `json:"last_admin_read_at,omitempty"`
 	UnreadCount        int64      `json:"unread_count"`
+	LastMessagePreview string     `json:"last_message_preview,omitempty"`
+	LastMessageSenderType string  `json:"last_message_sender_type,omitempty"`
 	Order              *dbent.PaymentOrder `json:"order,omitempty"`
 }
 
@@ -275,7 +277,9 @@ func (s *SupportConversationService) ReplyToConversation(ctx context.Context, re
 
 func (s *SupportConversationService) ListUserConversations(ctx context.Context, userID int64) ([]*SupportConversation, error) {
 	query := `
-		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at
+		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at,
+		       COALESCE((SELECT message FROM support_messages sm WHERE sm.conversation_id = support_conversations.id ORDER BY created_at DESC, id DESC LIMIT 1), '') AS last_message_preview,
+		       COALESCE((SELECT sender_type FROM support_messages sm WHERE sm.conversation_id = support_conversations.id ORDER BY created_at DESC, id DESC LIMIT 1), '') AS last_message_sender_type
 		FROM support_conversations
 		WHERE user_id = $1
 		ORDER BY last_message_at DESC
@@ -318,7 +322,9 @@ func (s *SupportConversationService) ListAdminConversations(ctx context.Context,
 
 	args = append(args, pageSize, (page-1)*pageSize)
 	query := fmt.Sprintf(`
-		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at
+		SELECT id, user_id, order_id, subject, status, created_at, updated_at, last_message_at, last_user_message_at, last_admin_message_at, last_user_read_at, last_admin_read_at,
+		       COALESCE((SELECT message FROM support_messages sm WHERE sm.conversation_id = support_conversations.id ORDER BY created_at DESC, id DESC LIMIT 1), '') AS last_message_preview,
+		       COALESCE((SELECT sender_type FROM support_messages sm WHERE sm.conversation_id = support_conversations.id ORDER BY created_at DESC, id DESC LIMIT 1), '') AS last_message_sender_type
 		FROM support_conversations
 		WHERE %s
 		ORDER BY last_message_at DESC
@@ -425,7 +431,7 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 	for rows.Next() {
 		item := &SupportConversation{}
 		var orderID sql.NullInt64
-		if err := rows.Scan(&item.ID, &item.UserID, &orderID, &item.Subject, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.LastMessageAt, &item.LastUserMessageAt, &item.LastAdminMessageAt, &item.LastUserReadAt, &item.LastAdminReadAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &orderID, &item.Subject, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.LastMessageAt, &item.LastUserMessageAt, &item.LastAdminMessageAt, &item.LastUserReadAt, &item.LastAdminReadAt, &item.LastMessagePreview, &item.LastMessageSenderType); err != nil {
 			return nil, fmt.Errorf("scan support conversation: %w", err)
 		}
 		if orderID.Valid {

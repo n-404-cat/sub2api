@@ -8,6 +8,7 @@ import type { SupportConversation } from '@/types/payment'
 export const useSupportStore = defineStore('support', () => {
   const conversations = ref<SupportConversation[]>([])
   const loading = ref(false)
+  let timer: ReturnType<typeof setInterval> | null = null
 
   const unreadCount = computed(() => {
     return conversations.value.reduce((sum, item) => sum + Number(item.unread_count || 0), 0)
@@ -39,11 +40,26 @@ export const useSupportStore = defineStore('support', () => {
     }
   }
 
+  function startPolling() {
+    if (timer) return
+    timer = setInterval(() => {
+      fetchConversations(true)
+    }, 5000)
+  }
+
+  function stopPolling() {
+    if (!timer) return
+    clearInterval(timer)
+    timer = null
+  }
+
   return {
     conversations,
     loading,
     unreadCount,
     fetchConversations,
     markConversationSeen,
+    startPolling,
+    stopPolling,
   }
 })

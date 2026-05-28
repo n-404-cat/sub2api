@@ -898,6 +898,7 @@ watch(
 
 onMounted(() => {
   supportStore.fetchConversations()
+  supportStore.startPolling()
   if (isAdmin.value) {
     adminSettingsStore.fetch()
   }

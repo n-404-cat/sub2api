@@ -259,6 +259,8 @@ export interface SupportConversation {
   last_user_read_at?: string
   last_admin_read_at?: string
   unread_count?: number
+  last_message_preview?: string
+  last_message_sender_type?: string
   order?: PaymentOrder
 }
 

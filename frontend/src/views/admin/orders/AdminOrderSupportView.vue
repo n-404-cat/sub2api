@@ -24,12 +24,28 @@
             v-for="item in conversations"
             :key="item.id"
             class="cursor-pointer rounded-xl border px-4 py-3 transition-colors"
-            :class="selectedConversation?.id === item.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800'"
+            :class="[
+              selectedConversation?.id === item.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800',
+              item.unread_count ? 'ring-1 ring-red-200 dark:ring-red-900/40' : ''
+            ]"
             @click="openConversation(item.id)"
           >
             <div class="flex items-center justify-between gap-3">
-              <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ item.subject || localText('客服咨询', 'Support') }}</p>
-              <span class="text-xs text-gray-400">{{ formatDateTime(item.last_message_at) }}</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ item.subject || localText('客服咨询', 'Support') }}</p>
+                <p class="mt-1 truncate text-xs" :class="item.unread_count ? 'font-medium text-red-600 dark:text-red-300' : 'text-gray-500 dark:text-gray-400'">
+                  {{ conversationPreview(item) }}
+                </p>
+              </div>
+              <div class="flex flex-col items-end gap-1">
+                <span class="text-xs text-gray-400">{{ formatDateTime(item.last_message_at) }}</span>
+                <span
+                  v-if="item.unread_count"
+                  class="rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-[18px] text-white"
+                >
+                  {{ item.unread_count > 99 ? '99+' : item.unread_count }}
+                </span>
+              </div>
             </div>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{ item.order?.out_trade_no ? `${localText('订单号', 'Order No')}: ${item.order.out_trade_no}` : localText('未关联订单', 'No order linked') }}
@@ -324,6 +340,12 @@ function formatPaymentType(type: string): string {
 
 function formatShortTime(value: string): string {
   return new Date(value).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function conversationPreview(item: SupportConversation): string {
+  const prefix = item.last_message_sender_type === 'admin' ? localText('客服', 'Support') : localText('用户', 'User')
+  const preview = item.last_message_preview?.replace('[ORDER_CARD]\n', '').split('\n')[0] || localText('暂无消息', 'No messages')
+  return `${prefix}: ${preview}`
 }
 
 function debounceLoad() {
