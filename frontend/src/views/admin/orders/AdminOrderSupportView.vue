@@ -420,6 +420,16 @@ async function openConversation(id: number) {
   try {
     const res = await adminSupportAPI.get(id)
     selectedDetail.value = res.data
+    const idx = conversations.value.findIndex(item => item.id === id)
+    if (idx >= 0 && res.data.messages.length > 0) {
+      const lastMessage = res.data.messages[res.data.messages.length - 1]
+      conversations.value[idx] = {
+        ...conversations.value[idx],
+        last_message_at: lastMessage.created_at,
+        last_message_preview: lastMessage.message,
+        last_message_sender_type: lastMessage.sender_type,
+      }
+    }
     supportStore.markConversationSeen(id, res.data.conversation.last_message_at)
     pendingOrderId.value = res.data.conversation.order_id ?? null
     await loadRelatedOrders(res.data.conversation.user_id)
