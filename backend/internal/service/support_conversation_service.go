@@ -438,27 +438,33 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 				}
 			}
 		}
-		item.UnreadCount = computeUnreadCount(item, reader)
+		item.UnreadCount = s.computeUnreadCount(ctx, item, reader)
 		items = append(items, item)
 	}
 	return items, rows.Err()
 }
 
-func computeUnreadCount(item *SupportConversation, reader supportConversationReader) int64 {
+func (s *SupportConversationService) computeUnreadCount(ctx context.Context, item *SupportConversation, reader supportConversationReader) int64 {
 	if item == nil {
 		return 0
 	}
-	switch reader {
-	case supportReaderAdmin:
-		if item.LastUserMessageAt != nil && (item.LastAdminReadAt == nil || item.LastUserMessageAt.After(*item.LastAdminReadAt)) {
-			return 1
-		}
-	case supportReaderUser:
-		if item.LastAdminMessageAt != nil && (item.LastUserReadAt == nil || item.LastAdminMessageAt.After(*item.LastUserReadAt)) {
-			return 1
-		}
+	columnSender := "admin"
+	readAt := item.LastUserReadAt
+	if reader == supportReaderAdmin {
+		columnSender = "user"
+		readAt = item.LastAdminReadAt
 	}
-	return 0
+	count := int64(0)
+	query := `SELECT COUNT(*) FROM support_messages WHERE conversation_id = $1 AND sender_type = $2`
+	args := []any{item.ID, columnSender}
+	if readAt != nil {
+		query += ` AND created_at > $3`
+		args = append(args, *readAt)
+	}
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return 0
+	}
+	return count
 }
 
 func (s *SupportConversationService) markConversationRead(ctx context.Context, conversationID int64, reader string) error {
