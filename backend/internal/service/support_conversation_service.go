@@ -27,6 +27,8 @@ type SupportConversation struct {
 	UnreadCount        int64      `json:"unread_count"`
 	LastMessagePreview string     `json:"last_message_preview,omitempty"`
 	LastMessageSenderType string  `json:"last_message_sender_type,omitempty"`
+	UserHasUnread      bool       `json:"user_has_unread"`
+	AdminHasUnread     bool       `json:"admin_has_unread"`
 	Order              *dbent.PaymentOrder `json:"order,omitempty"`
 }
 
@@ -438,6 +440,8 @@ func (s *SupportConversationService) scanConversationRows(ctx context.Context, r
 				}
 			}
 		}
+		item.UserHasUnread = item.LastAdminMessageAt != nil && (item.LastUserReadAt == nil || item.LastAdminMessageAt.After(*item.LastUserReadAt))
+		item.AdminHasUnread = item.LastUserMessageAt != nil && (item.LastAdminReadAt == nil || item.LastUserMessageAt.After(*item.LastAdminReadAt))
 		item.UnreadCount = s.computeUnreadCount(ctx, item, reader)
 		items = append(items, item)
 	}

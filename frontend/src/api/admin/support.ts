@@ -17,6 +17,9 @@ export const adminSupportAPI = {
   get(id: number) {
     return apiClient.get<SupportConversationDetail>(`/admin/payment/support/conversations/${id}`)
   },
+  read(id: number) {
+    return apiClient.post<{ message: string }>(`/admin/payment/support/conversations/${id}/read`)
+  },
   reply(id: number, data: { message: string }) {
     return apiClient.post<SupportConversationDetail>(`/admin/payment/support/conversations/${id}/messages`, data)
   },

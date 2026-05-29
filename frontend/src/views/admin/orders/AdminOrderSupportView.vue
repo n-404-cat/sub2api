@@ -50,6 +50,20 @@
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{ item.order?.out_trade_no ? `${localText('订单号', 'Order No')}: ${item.order.out_trade_no}` : localText('未关联订单', 'No order linked') }}
             </p>
+            <div class="mt-1 flex items-center gap-2 text-[11px]">
+              <span
+                v-if="item.admin_has_unread"
+                class="rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700 dark:bg-red-900/20 dark:text-red-300"
+              >
+                {{ localText('管理员未读', 'Admin unread') }}
+              </span>
+              <span
+                v-else-if="item.user_has_unread"
+                class="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+              >
+                {{ localText('用户未读', 'User unread') }}
+              </span>
+            </div>
             <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
               {{ localText('用户ID', 'User ID') }} #{{ item.user_id }}
             </p>
@@ -279,7 +293,12 @@ const statusOptions = [
 const autoRefresh = useAutoRefresh({
   storageKey: 'admin-support-auto-refresh',
   defaultInterval: 5,
-  onRefresh: () => selectedConversation.value ? openConversation(selectedConversation.value.id) : loadConversations(),
+  onRefresh: async () => {
+    await loadConversations()
+    if (selectedConversation.value) {
+      await refreshSelectedConversation(selectedConversation.value.id)
+    }
+  },
   shouldPause: () => sending.value,
 })
 
@@ -417,6 +436,17 @@ async function loadConversations() {
 
 async function openConversation(id: number) {
   selectedConversation.value = conversations.value.find(item => item.id === id) || null
+  await refreshSelectedConversation(id)
+  try {
+    await adminSupportAPI.read(id)
+    supportStore.markConversationSeen(id)
+    await loadConversations()
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  }
+}
+
+async function refreshSelectedConversation(id: number) {
   try {
     const res = await adminSupportAPI.get(id)
     selectedDetail.value = res.data
@@ -430,7 +460,6 @@ async function openConversation(id: number) {
         last_message_sender_type: lastMessage.sender_type,
       }
     }
-    supportStore.markConversationSeen(id, res.data.conversation.last_message_at)
     pendingOrderId.value = res.data.conversation.order_id ?? null
     await loadRelatedOrders(res.data.conversation.user_id)
     autoRefresh.resetCountdown()
@@ -472,6 +501,7 @@ async function sendReply() {
     const res = await adminSupportAPI.reply(selectedConversation.value.id, { message: replyMessage.value.trim() })
     selectedDetail.value = res.data
     replyMessage.value = ''
+    await loadConversations()
     await scrollToBottom()
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))

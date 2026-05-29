@@ -109,6 +109,11 @@ export const paymentAPI = {
     return apiClient.get<SupportConversationDetail>(`/payment/support/conversations/${id}`)
   },
 
+  /** Mark support conversation as read */
+  markMySupportConversationRead(id: number) {
+    return apiClient.post<{ message: string }>(`/payment/support/conversations/${id}/read`)
+  },
+
   /** Reply in a support conversation */
   replyMySupportConversation(id: number, data: { message: string }) {
     return apiClient.post<SupportConversationDetail>(`/payment/support/conversations/${id}/messages`, data)

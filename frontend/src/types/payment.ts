@@ -261,6 +261,8 @@ export interface SupportConversation {
   unread_count?: number
   last_message_preview?: string
   last_message_sender_type?: string
+  user_has_unread?: boolean
+  admin_has_unread?: boolean
   order?: PaymentOrder
 }
 

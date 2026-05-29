@@ -336,7 +336,6 @@ async function loadDetail(resetCountdown = true) {
   try {
     const res = await paymentAPI.getMySupportConversation(id)
     detail.value = res.data
-    supportStore.markConversationSeen(id, res.data.conversation.last_message_at)
     if (resetCountdown) autoRefresh.resetCountdown()
     await scrollToBottom()
   } catch (err: unknown) {
@@ -391,6 +390,12 @@ watch(() => detail.value?.messages?.length, () => {
 
 onMounted(async () => {
   await Promise.all([loadDetail(), loadOrders()])
+  const id = Number(route.params.id)
+  if (id) {
+    await paymentAPI.markMySupportConversationRead(id)
+    supportStore.markConversationSeen(id)
+    await supportStore.fetchConversations(true)
+  }
   await supportStore.fetchConversations(true)
   autoRefresh.setEnabled(true)
   autoRefresh.start()
